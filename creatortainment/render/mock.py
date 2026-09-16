@@ -20,6 +20,15 @@ class AssetDimensionCache:
         return self._dimensions[path]
 
 
+def _storyboard_keyframe(element: dict[str, Any]) -> dict[str, Any]:
+    """Use the final visible state, or the final authored state as fallback."""
+    keyframes = element["keyframes"]
+    for keyframe in reversed(keyframes):
+        if float(keyframe.get("opacity", 1.0)) > 0.0:
+            return keyframe
+    return keyframes[-1]
+
+
 def _asset_path(registry: dict[str, Any], key: str, assets_root: Path) -> Path:
     relative_path = Path(registry[key])
     if relative_path.parts and relative_path.parts[0] == "assets":
@@ -49,7 +58,7 @@ def _place_element(
     if not asset_path.is_file():
         return
 
-    keyframe = element["keyframes"][0]
+    keyframe = _storyboard_keyframe(element)
     image = Image.open(asset_path).convert("RGBA")
     native_width, native_height = dimension_cache.dimensions(asset_path)
     target_height = keyframe.get("target_height_frac")
