@@ -22,17 +22,31 @@ assets/audio/sfx/whoosh.mp3
 assets/audio/monkeys_spinning_monkeys.mp3
 ```
 
-Then validate the script:
+The example scripts are stored under `scripts/example_scripts/`. Validate one
+of them with:
 
 ```bash
-python3 -m creatortainment validate example_script.json
+python3 -m creatortainment validate scripts/example_scripts/example_script.json
 ```
 
 Create the first dependency-light storyboard mock:
 
 ```bash
-python3 -m creatortainment render example_script.json
+python3 -m creatortainment render scripts/example_scripts/example_script.json
 ```
+
+To exercise the offline narration alignment pipeline without API credentials:
+
+```bash
+python3 -m creatortainment align \
+  scripts/example_scripts/example_script.json \
+  --mock-response tests/fixtures/mock_elevenlabs_response.json
+```
+
+This creates a project folder containing `script.json`, `build_manifest.json`,
+and the cached `narration.mp3` bytes returned by the mock client. A repeated
+alignment with the same narration uses the manifest cache. Changing any
+scene's `narration_text` causes one new full-video synthesis.
 
 Each render creates a folder like:
 

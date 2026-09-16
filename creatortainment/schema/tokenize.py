@@ -1,8 +1,5 @@
-"""Canonical narration tokenization."""
+"""Backward-compatible import for the canonical audio tokenizer."""
 
-from __future__ import annotations
+from ..audio.tokenize import tokenize
 
-
-def tokenize(text: str) -> list[str]:
-    """Split on whitespace only, preserving punctuation attached to words."""
-    return text.strip().split()
+__all__ = ["tokenize"]
