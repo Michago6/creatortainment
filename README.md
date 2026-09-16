@@ -6,7 +6,8 @@ assets live at the repository level and are referenced by the script's
 
 ## First test
 
-Add the files below to `assets/` using the paths in `example_script.json`:
+Add the files below to `assets/` using the paths in
+`scripts/example_scripts/example_script.json`:
 
 ```text
 assets/backgrounds/default_studio.jpg
@@ -35,18 +36,104 @@ Create the first dependency-light storyboard mock:
 python3 -m creatortainment render scripts/example_scripts/example_script.json
 ```
 
-To exercise the offline narration alignment pipeline without API credentials:
+## Running tests
+
+Install the development/test dependencies, then run the complete offline test
+suite:
+
+```bash
+.venv/bin/python -m pip install -e '.[full]'
+.venv/bin/python -m pytest
+```
+
+The tests do not call ElevenLabs or spend API credits. They cover tokenization,
+alignment, project identity, narration hash caching, response parsing, and
+asset/script validation.
+
+To generate real narration and alignment, install the full dependencies:
+
+```bash
+pip install -e '.[full]'
+python3 -m creatortainment align scripts/example_scripts/example_script.json
+```
+
+The program reads the API key automatically from the repository-root file
+`elevenlabs_api_key.txt`. The ElevenLabs voice ID is configured in the script's
+`project.voice_id` field.
+
+For detailed ElevenLabs diagnostics, add `--debug`:
 
 ```bash
 python3 -m creatortainment align \
   scripts/example_scripts/example_script.json \
-  --mock-response tests/fixtures/mock_elevenlabs_response.json
+  --debug
 ```
 
-This creates a project folder containing `script.json`, `build_manifest.json`,
-and the cached `narration.mp3` bytes returned by the mock client. A repeated
-alignment with the same narration uses the manifest cache. Changing any
-scene's `narration_text` causes one new full-video synthesis.
+Diagnostics are written to `projects/<slug>/debug.log`. The log records request
+metadata, response type and fields, encoded-audio size, alignment shape, and
+parsing exceptions; it never records the API key.
+
+Projects use a stable title-based folder under `projects/`. Narrations are
+stored permanently under that project's `narrations/` folder, each with a
+sidecar alignment JSON file. Re-running the same narration prompts for
+confirmation and does not create another audio file; changed narration creates
+a new file after confirmation. Use `--force-audio` to skip confirmation and
+always create a new take.
+
+## CLI commands and flags
+
+### `validate`
+
+```bash
+python3 -m creatortainment validate <script.json>
+```
+
+Validates the script structure, asset registry, referenced asset files, word
+indexes, resolution, anchors, element sizing, TTS model, and voice ID.
+
+Flags:
+
+- `-h`, `--help` — show command help.
+
+### `render`
+
+```bash
+python3 -m creatortainment render <script.json>
+```
+
+Creates the current dependency-light storyboard PNG.
+
+Flags:
+
+- `--out <path>` — choose the output PNG path relative to the generated
+  project directory.
+- `-h`, `--help` — show command help.
+
+### `align`
+
+```bash
+python3 -m creatortainment align <script.json>
+```
+
+Generates the real ElevenLabs narration, word alignment, narration sidecar,
+and `build_manifest.json`.
+
+Flags:
+
+- `--force-audio` — skip the existing-project confirmation and always generate
+  a new narration file. Existing narration files are never overwritten.
+- `--debug` — write detailed request, response, and parsing diagnostics to
+  `projects/<slug>/debug.log`.
+- `-h`, `--help` — show command help.
+
+For help on any command:
+
+```bash
+python3 -m creatortainment --help
+python3 -m creatortainment validate --help
+python3 -m creatortainment render --help
+python3 -m creatortainment align --help
+```
 
 Each render creates a folder like:
 
@@ -57,6 +144,7 @@ projects/understanding-gpu-architecture-20260916-132445/
 └── output/storyboard.png
 ```
 
-The current mock renderer creates a storyboard PNG and manifest. ElevenLabs,
-audio alignment, MoviePy video rendering, and API integrations will be added
-after the asset-backed mock passes.
+The current `render` command creates a storyboard PNG and mock manifest.
+ElevenLabs narration and word alignment are available through `align`.
+MoviePy-based final video rendering, animated timelines, captions, and mixed
+audio are still upcoming phases.

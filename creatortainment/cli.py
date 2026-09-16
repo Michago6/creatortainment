@@ -4,27 +4,33 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
 import shutil
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .render.mock import render_storyboard, write_manifest
-from .audio.elevenlabs_client import NarrationResult, WordTimestamp
-from .audio.manifest import build_manifest
+from .audio.alignment import align_scenes
+from .audio.elevenlabs_client import ElevenLabsNarrationClient
+from .audio.manifest import DEFAULT_TTS_MODEL, narration_hash, write_manifest
+from .project_identity import (
+    new_state,
+    project_state_path,
+    read_project_state,
+    slugify,
+    write_project_state,
+)
 from .schema.validate import load_script, validate_script
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSETS_ROOT = REPO_ROOT / "assets"
 PROJECTS_ROOT = REPO_ROOT / "projects"
+ELEVENLABS_API_KEY_PATH = REPO_ROOT / "elevenlabs_api_key.txt"
 
 
 def project_slug(title: str) -> str:
-    value = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
-    return value or "untitled-project"
+    return slugify(title)
 
 
 def validate_command(script_path: Path) -> int:
@@ -62,23 +68,20 @@ def render_command(script_path: Path, output: Path | None) -> int:
     return 0
 
 
-class FixtureNarrationClient:
-    def __init__(self, fixture_path: Path) -> None:
-        self.fixture_path = fixture_path
-        self.calls = 0
-
-    def synthesize(self, scenes: list[dict]) -> NarrationResult:
-        self.calls += 1
-        payload = json.loads(self.fixture_path.read_text(encoding="utf-8"))
-        timestamps = payload["word_timestamps"] if isinstance(payload, dict) else payload
-        return NarrationResult(
-            audio_bytes=b"mock narration audio",
-            word_timestamps=[WordTimestamp(**item) for item in timestamps],
-            pause_before_sec=[],
+def read_api_key(path: Path) -> str:
+    if not path.is_file():
+        raise RuntimeError(
+            f"ElevenLabs API key file not found: {path}. "
+            "Create this file with the API key on its first non-empty line."
         )
+    for line in path.read_text(encoding="utf-8").splitlines():
+        value = line.strip()
+        if value and not value.startswith("#"):
+            return value
+    raise RuntimeError(f"ElevenLabs API key file is empty: {path}")
 
 
-def align_command(script_path: Path, mock_response: Path | None) -> int:
+def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
     script = load_script(script_path)
     result = validate_script(script, ASSETS_ROOT)
     if not result.valid:
@@ -86,25 +89,84 @@ def align_command(script_path: Path, mock_response: Path | None) -> int:
         for error in result.errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    project_dir = PROJECTS_ROOT / f"{project_slug(script['project']['title'])}-{timestamp}"
-    project_dir.mkdir(parents=True, exist_ok=False)
-    shutil.copy2(script_path, project_dir / "script.json")
-    if mock_response is not None:
-        client = FixtureNarrationClient(mock_response)
-    else:
-        from .audio.elevenlabs_client import ElevenLabsNarrationClient
-
-        api_key = os.environ.get("ELEVENLABS_API_KEY")
-        voice_id = os.environ.get("ELEVENLABS_VOICE_ID")
-        if not api_key or not voice_id:
-            raise RuntimeError(
-                "Set ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID, or pass --mock-response."
+    title = script["project"]["title"]
+    project_dir = PROJECTS_ROOT / project_slug(title)
+    debug_log = project_dir / "debug.log" if debug else None
+    if debug:
+        debug_log.parent.mkdir(parents=True, exist_ok=True)
+        debug_log.write_text(
+            f"align start script={script_path} project={project_dir}\n",
+            encoding="utf-8",
+        )
+    incoming_hash = narration_hash(script)
+    existing = project_dir.exists()
+    api_key = read_api_key(ELEVENLABS_API_KEY_PATH)
+    voice_id = script["project"].get("voice_id")
+    if not isinstance(voice_id, str) or not voice_id.strip():
+        raise RuntimeError(
+            "project.voice_id is required in the input script and must contain an ElevenLabs voice ID."
+        )
+    if existing and not force_audio:
+        state = read_project_state(project_state_path(project_dir))
+        print(f"A project named '{title}' already exists (last updated {state.get('updated_at', 'unknown')}).")
+        same = state.get("narration_hash") == incoming_hash
+        if same:
+            print("Same audio description detected. New audio won't be created.")
+        else:
+            print(
+                "A new audio for this project will be created. The existing narration "
+                "will not be overwritten — a new file will be added to this project's narrations/ folder."
             )
-        client = ElevenLabsNarrationClient(api_key, voice_id=voice_id)
-    manifest, cached = build_manifest(script, project_dir / "build_manifest.json", client)
-    print(f"{'Cache hit' if cached else 'Generated'} manifest: {project_dir / 'build_manifest.json'}")
-    print(f"Scenes aligned: {len(manifest['scenes'])}")
+        if input(f"Update existing project '{title}' with this script? [y/N] ").strip().lower() not in {"y", "yes"}:
+            print("Update cancelled; no files were changed.")
+            return 0
+        if same:
+            state.update({"title": title, "date": script["project"].get("date"), "updated_at": datetime.now(timezone.utc).isoformat()})
+            write_project_state(project_state_path(project_dir), state)
+            print("Project metadata updated; existing narration remains active.")
+            return 0
+    elif not existing:
+        project_dir.mkdir(parents=True, exist_ok=True)
+        write_project_state(project_state_path(project_dir), new_state(script))
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(script_path, project_dir / "script.json")
+    model = script["project"].get("tts_model", DEFAULT_TTS_MODEL)
+    result = ElevenLabsNarrationClient(
+        api_key,
+        voice_id=voice_id,
+        model_id=model,
+        debug_log=debug_log,
+    ).synthesize(script["scenes"])
+    now = datetime.now(timezone.utc)
+    compact = now.strftime("%Y%m%dT%H%M%S%fZ")
+    short_hash = incoming_hash[:12]
+    narrations_dir = project_dir / "narrations"
+    narrations_dir.mkdir(exist_ok=True)
+    audio_path = narrations_dir / f"{short_hash}_{compact}.mp3"
+    while audio_path.exists() or audio_path.with_suffix(".json").exists():
+        compact = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        audio_path = narrations_dir / f"{short_hash}_{compact}.mp3"
+    sidecar_path = audio_path.with_suffix(".json")
+    audio_path.write_bytes(result.audio_bytes)
+    timestamps = [timestamp.to_dict() for timestamp in result.word_timestamps]
+    sidecar_path.write_text(json.dumps({
+        "narration_text": " ".join(scene["narration_text"].strip() for scene in script["scenes"]),
+        "tts_model": model,
+        "word_timestamps": timestamps,
+        "created_at": now.isoformat(),
+    }, indent=2) + "\n", encoding="utf-8")
+    manifest = {
+        "narration_hash": incoming_hash,
+        "narration_audio_path": str(audio_path.relative_to(project_dir)),
+        "word_timestamps": timestamps,
+        "scenes": [scene.to_dict() for scene in align_scenes(script["scenes"], timestamps)],
+    }
+    write_manifest(project_dir / "build_manifest.json", manifest)
+    state = new_state(script, now)
+    write_project_state(project_state_path(project_dir), state)
+    print(f"Generated narration: {audio_path}")
+    print(f"Updated manifest: {project_dir / 'build_manifest.json'}")
     return 0
 
 
@@ -118,7 +180,8 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--out", type=Path, help="Output PNG path relative to the new project.")
     align = commands.add_parser("align", help="Generate or reuse the full-video narration manifest.")
     align.add_argument("script", type=Path)
-    align.add_argument("--mock-response", type=Path, help="Offline timestamp fixture JSON.")
+    align.add_argument("--force-audio", action="store_true", help="Always create a new narration without confirmation.")
+    align.add_argument("--debug", action="store_true", help="Write detailed API diagnostics to the project debug.log.")
     return parser
 
 
@@ -129,5 +192,5 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "render":
         return render_command(args.script, args.out)
     if args.command == "align":
-        return align_command(args.script, args.mock_response)
+        return align_command(args.script, args.force_audio, args.debug)
     return 2

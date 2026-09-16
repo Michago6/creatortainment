@@ -1,3 +1,5 @@
+"""Tests canonical tokenization, scene alignment, and narration cache behavior."""
+
 from __future__ import annotations
 
 import copy
@@ -16,6 +18,7 @@ FIXTURE_PATH = ROOT / "tests/fixtures/mock_elevenlabs_response.json"
 
 
 def test_tokenize_preserves_word_boundaries() -> None:
+    """Whitespace normalization preserves punctuation-attached tokens."""
     assert tokenize("  GPU,   we're state-of-the-art  ") == [
         "GPU,",
         "we're",
@@ -34,6 +37,7 @@ def _timestamps() -> list[dict]:
 
 
 def test_alignment_slices_example_scenes() -> None:
+    """The example script receives correct cumulative scene offsets and timing."""
     script = _script()
     aligned = align_scenes(script["scenes"], _timestamps())
     assert [(item.word_offset, item.word_count) for item in aligned] == [
@@ -67,6 +71,7 @@ class CountingClient:
 
 
 def test_manifest_cache_hit_and_narration_cache_miss(tmp_path: Path) -> None:
+    """Matching narration reuses the cache while edited text synthesizes again."""
     script = _script()
     client = CountingClient(_timestamps())
     path = tmp_path / "build_manifest.json"

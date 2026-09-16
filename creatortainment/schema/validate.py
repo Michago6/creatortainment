@@ -59,6 +59,14 @@ def validate_script(script: dict[str, Any], assets_root: Path) -> ValidationResu
         )
     ):
         errors.append("project.resolution must be [positive_width, positive_height].")
+    elif "tts_model" in project and (
+        not isinstance(project["tts_model"], str) or not project["tts_model"].strip()
+    ):
+        errors.append("project.tts_model must be a non-empty string.")
+    if isinstance(project, dict) and (
+        not isinstance(project.get("voice_id"), str) or not project["voice_id"].strip()
+    ):
+        errors.append("project.voice_id must be a non-empty string.")
     if not isinstance(registry, dict):
         errors.append("asset_registry must be an object.")
         registry = {}

@@ -13,11 +13,16 @@
     "elements_are_scene_scoped": "elements[] is fully redeclared per scene. Nothing persists automatically across a scene boundary \u2014 if a character should appear to 'continue' into the next scene, that scene must redeclare it with its own opening keyframe.",
     "sizing_model": "Elements are sized as a FRACTION OF THE CANVAS, never as a multiplier of the source file's native pixel dimensions. Each keyframe sets exactly ONE of target_height_frac or target_width_frac (0.0-1.0, fraction of project.resolution's height or width respectively) \u2014 the pipeline reads the asset's actual pixel dimensions from disk at build time and computes the real scale factor as (frac * canvas_dimension_px) / native_dimension_px, preserving the source aspect ratio. Never set both fields unless you deliberately want a non-uniform stretch; the script itself never declares an asset's native pixel size.",
     "anchor": "Each element declares an anchor point via 'anchor': 'top_left' | 'center' | 'bottom_center'. pos is the canvas-pixel location of THAT anchor point, not the image's top-left corner. Use bottom_center for anything that should stay planted on the ground as it resizes across keyframes (e.g. a standing character); use center for floating diagrams/icons. This keeps pos stable across keyframes even when target_height_frac/target_width_frac changes the element's rendered size.",
-    "bg_fit": "Background images are always resized via cover-fit (scaled + center-cropped to exactly fill project.resolution, like CSS background-size: cover). Backgrounds have no size field \u2014 the author never manually scales a bg."
+    "bg_fit": "Background images are always resized via cover-fit (scaled + center-cropped to exactly fill project.resolution, like CSS background-size: cover). Backgrounds have no size field \u2014 the author never manually scales a bg.",
+    "bg_music_is_a_change_event": "bg_music represents a CHANGE, not per-scene state. null means 'no change \u2014 whatever was already playing keeps playing unchanged.' To stop music, emit an explicit bg_music with volume: 0.0 and a fade_in_sec duration (the field doubles as the transition time toward the target volume, whether that's louder or quieter, despite the name).",
+    "tts_model_and_project_identity": "project.tts_model selects the ElevenLabs model used for the ONE narration call covering the whole video (default eleven_flash_v2_5, the cheapest option). project.title is slugified into a STABLE on-disk project folder name (no date/time in it). Running a script whose title matches an existing project reuses that project: if the concatenated narration_text + tts_model hash matches what's cached, no new API call is made; if it differs, a new narration file is added to that project's narrations/ folder (old ones are never overwritten) after an explicit confirmation prompt. project.date is metadata only \u2014 it does not affect identity matching.",
+    "voice_id": "project.voice_id is the ElevenLabs voice ID used for the single full-video narration call. It must be provided in every script."
   },
   "project": {
     "title": "Understanding GPU Architecture",
     "date": "2026-09-15",
+    "tts_model": "eleven_flash_v2_5",
+    "voice_id": "fBD19tfE58bkETeiwUoC",
     "aspect_ratio": "9:16",
     "resolution": [1080, 1920],
     "fps": 30,

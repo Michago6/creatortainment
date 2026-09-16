@@ -10,10 +10,13 @@ from typing import Any
 from .alignment import align_scenes
 from .elevenlabs_client import NarrationClient, NarrationResult, narration_text_and_pauses
 
+DEFAULT_TTS_MODEL = "eleven_flash_v2_5"
+
 
 def narration_hash(script: dict[str, Any]) -> str:
     text, _ = narration_text_and_pauses(script["scenes"])
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    model = script.get("project", {}).get("tts_model", DEFAULT_TTS_MODEL)
+    return hashlib.sha256(f"{text}\n{model}".encode("utf-8")).hexdigest()
 
 
 def read_manifest(path: Path) -> dict[str, Any]:
