@@ -3,10 +3,40 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
+
+
+def storyboard_panel_size(
+    resolution: tuple[int, int], panel_width: int = 360
+) -> tuple[int, int]:
+    """Return a preview panel that preserves the canonical canvas aspect ratio."""
+    width, height = resolution
+    return panel_width, max(1, math.ceil(panel_width * height / width))
+
+
+def storyboard_columns(resolution: tuple[int, int], scene_count: int) -> int:
+    """Choose a readable grid, giving landscape scenes larger preview panels."""
+    if scene_count <= 0:
+        return 1
+    if resolution[0] > resolution[1] and scene_count >= 4:
+        return min(2, scene_count)
+    return min(4, scene_count)
+
+
+def storyboard_sheet_size(
+    resolution: tuple[int, int], scene_count: int, panel_width: int = 360
+) -> tuple[int, int]:
+    """Return the contact-sheet dimensions for the scene count and canvas ratio."""
+    columns = storyboard_columns(resolution, scene_count)
+    sheet_width = 1440 if resolution[0] > resolution[1] else 1080
+    panel_width = max(1, sheet_width // columns)
+    panel_width, panel_height = storyboard_panel_size(resolution, panel_width)
+    rows = (scene_count + columns - 1) // columns
+    return columns * panel_width, rows * panel_height
 
 
 class AssetDimensionCache:
@@ -44,6 +74,37 @@ def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         if Path(candidate).is_file():
             return ImageFont.truetype(candidate, size)
     return ImageFont.load_default()
+
+
+def wrap_caption(
+    text: str,
+    draw: ImageDraw.ImageDraw,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    max_width: int,
+) -> list[str]:
+    """Wrap caption words to the available pixel width, not a fixed character count."""
+    lines: list[str] = []
+    line = ""
+    for word in text.split():
+        candidate = f"{line} {word}".strip()
+        if line and draw.textlength(candidate, font=font) > max_width:
+            lines.append(line)
+            line = word
+        else:
+            line = candidate
+    if line:
+        lines.append(line)
+    return lines
+
+
+def caption_box_height(
+    line_count: int,
+    line_height: int,
+    padding: int,
+    max_height: int,
+) -> int:
+    """Size the caption box from its text block plus top and bottom padding."""
+    return min(max_height, padding * 2 + line_height * line_count)
 
 
 def _place_element(
@@ -98,14 +159,17 @@ def _place_element(
 def render_storyboard(script: dict[str, Any], assets_root: Path, output_path: Path) -> None:
     scenes = script["scenes"]
     canvas_size = tuple(script["project"]["resolution"])
-    panel_width = 360
-    panel_height = round(panel_width * canvas_size[1] / canvas_size[0])
-    columns = min(4, max(1, len(scenes)))
+    columns = storyboard_columns(canvas_size, len(scenes))
+    sheet_width = 1440 if canvas_size[0] > canvas_size[1] else 1080
+    panel_width, panel_height = storyboard_panel_size(
+        canvas_size,
+        max(1, sheet_width // columns),
+    )
     rows = (len(scenes) + columns - 1) // columns
     sheet = Image.new("RGB", (columns * panel_width, rows * panel_height), "#20242b")
     canvas_width, canvas_height = canvas_size
-    title_font = _font(max(24, round(canvas_width * 24 / panel_width)))
-    body_font = _font(max(16, round(canvas_width * 16 / panel_width)))
+    title_font = _font(max(18, round(canvas_width * 24 / panel_width)))
+    body_font = _font(max(12, round(canvas_width * 16 / panel_width)))
     dimension_cache = AssetDimensionCache()
 
     for index, scene in enumerate(scenes):
@@ -147,24 +211,36 @@ def render_storyboard(script: dict[str, Any], assets_root: Path, output_path: Pa
             fill="white",
             font=title_font,
         )
-        narration = scene["narration_text"]
-        words = narration.split()
-        lines: list[str] = []
-        line = ""
-        for word in words:
-            candidate = f"{line} {word}".strip()
-            if len(candidate) > 30:
-                lines.append(line)
-                line = word
-            else:
-                line = candidate
-        if line:
-            lines.append(line)
-        box_height = min(
-            round(canvas_height * 220 / panel_height),
-            round(canvas_height * (38 + 24 * len(lines)) / panel_height),
+        max_caption_height = round(canvas_height * 0.18)
+        text_bbox = draw.textbbox((0, 0), "Ag", font=body_font)
+        glyph_height = text_bbox[3] - text_bbox[1]
+        caption_padding = max(24, round(canvas_height * 0.015))
+        line_height = max(
+            glyph_height + caption_padding // 2,
+            round(canvas_height * 0.035),
         )
         margin_x = round(canvas_width * 12 / panel_width)
+        text_x = round(canvas_width * 24 / panel_width)
+        lines = wrap_caption(
+            scene["narration_text"],
+            draw,
+            body_font,
+            canvas_width - 2 * text_x,
+        )
+        visible_lines = max(
+            1,
+            min(
+                len(lines),
+                max(1, (max_caption_height - 2 * caption_padding) // line_height),
+            ),
+        )
+        lines = lines[-visible_lines:]
+        box_height = caption_box_height(
+            len(lines),
+            line_height,
+            caption_padding,
+            max_caption_height,
+        )
         margin_y = round(canvas_height * 12 / panel_height)
         draw.rectangle(
             (margin_x, canvas_height - box_height - margin_y, canvas_width - margin_x, canvas_height - margin_y),
@@ -173,9 +249,12 @@ def render_storyboard(script: dict[str, Any], assets_root: Path, output_path: Pa
         for line_number, text in enumerate(lines):
             draw.text(
                 (
-                    round(canvas_width * 24 / panel_width),
-                    canvas_height - box_height
-                    + round(canvas_height * (8 + line_number * 24) / panel_height),
+                    text_x,
+                    canvas_height
+                    - box_height
+                    + caption_padding
+                    - text_bbox[1]
+                    + line_number * line_height,
                 ),
                 text,
                 fill="white",
@@ -191,7 +270,7 @@ def render_storyboard(script: dict[str, Any], assets_root: Path, output_path: Pa
     sheet.save(output_path, format="PNG")
 
 
-def write_manifest(script: dict[str, Any], project_dir: Path, output_path: Path) -> None:
+def write_manifest(script: dict[str, Any], project_dir: Path) -> None:
     scenes = []
     for scene in script["scenes"]:
         scenes.append(

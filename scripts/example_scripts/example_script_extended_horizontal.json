@@ -1,0 +1,263 @@
+{
+  "_conventions": {
+    "word_indexing": "0-based. Tokenize narration_text by splitting on whitespace only (collapse repeated spaces first, strip leading/trailing). Do NOT split on punctuation \u2014 'GPU,' and \"state-of-the-art\" are each ONE token. Contractions like \"we're\" are one token. trigger_word_index is always LOCAL to the scene's own narration_text (resets to 0 per scene) \u2014 the build pipeline computes global offsets, the script author never does.",
+    "narration_generation": "narration_text for ALL scenes is concatenated in scene order and sent to ElevenLabs as ONE call, producing one continuous audio file for the whole video plus one global word-timestamp array. The pipeline slices that array back into per-scene ranges using each scene's word count. Editing any scene's narration_text invalidates the ENTIRE audio cache, not just that scene.",
+    "pause_before_sec": "Optional gap inserted before this scene's narration begins (SSML break if the ElevenLabs model supports it, otherwise literal silence spliced into the audio track at assembly time). Defaults to 0.3 if omitted. Set to 0 for a hard continuous read across a scene boundary.",
+    "caption_text_rule": "If caption_text is null, on-screen captions render narration_text verbatim with word-by-word highlight timed via the ElevenLabs alignment. If caption_text is set and its word count differs from narration_text, per-word highlighting is NOT attempted (ambiguous mapping) \u2014 render caption_text as static full-line text instead.",
+    "caption_style_inheritance": "scene.caption_style is null by default and inherits project.caption_style. If set, it is MERGED over the project default (only override the fields you're changing), not replaced wholesale.",
+    "asset_refs": "Every asset field (bg, element.asset, sfx.asset, bg_music.asset) must be a key in asset_registry. No raw file paths in scenes, no 'default' sentinel value.",
+    "transition_in_null": "null means hard cut into this scene. The first scene of the video should always be null.",
+    "easing_values": ["instant", "linear", "ease_in", "ease_out", "ease_in_out", "bounce"],
+    "duration_sec": "Always null in the authored script. Computed by the build pipeline from the sliced ElevenLabs alignment and written to build_manifest.json, never back into this file.",
+    "index_bounds": "trigger_word_index must be < the local word count of that scene's narration_text. Pipeline validation must reject scripts where it isn't, before any rendering starts.",
+    "elements_are_scene_scoped": "elements[] is fully redeclared per scene. Nothing persists automatically across a scene boundary \u2014 if a character should appear to 'continue' into the next scene, that scene must redeclare it with its own opening keyframe.",
+    "sizing_model": "Elements are sized as a FRACTION OF THE CANVAS, never as a multiplier of the source file's native pixel dimensions. Each keyframe sets exactly ONE of target_height_frac or target_width_frac (0.0-1.0, fraction of project.resolution's height or width respectively) \u2014 the pipeline reads the asset's actual pixel dimensions from disk at build time and computes the real scale factor as (frac * canvas_dimension_px) / native_dimension_px, preserving the source aspect ratio. Never set both fields unless you deliberately want a non-uniform stretch; the script itself never declares an asset's native pixel size.",
+    "anchor": "Each element declares an anchor point via 'anchor': 'top_left' | 'center' | 'bottom_center'. pos is the canvas-pixel location of THAT anchor point, not the image's top-left corner. Use bottom_center for anything that should stay planted on the ground as it resizes across keyframes (e.g. a standing character); use center for floating diagrams/icons. This keeps pos stable across keyframes even when target_height_frac/target_width_frac changes the element's rendered size.",
+    "bg_fit": "Background images are always resized via cover-fit (scaled + center-cropped to exactly fill project.resolution, like CSS background-size: cover). Backgrounds have no size field \u2014 the author never manually scales a bg.",
+    "bg_music_is_a_change_event": "bg_music represents a CHANGE, not per-scene state. null means 'no change \u2014 whatever was already playing keeps playing unchanged.' To stop music, emit an explicit bg_music with volume: 0.0 and a fade_in_sec duration (the field doubles as the transition time toward the target volume, whether that's louder or quieter, despite the name).",
+    "tts_model_and_project_identity": "project.tts_model selects the ElevenLabs model used for the ONE narration call covering the whole video (default eleven_flash_v2_5, the cheapest option). project.title is slugified into a STABLE on-disk project folder name (no date/time in it). Running a script whose title matches an existing project reuses that project: if the concatenated narration_text + tts_model hash matches what's cached, no new API call is made; if it differs, a new narration file is added to that project's narrations/ folder (old ones are never overwritten) after an explicit confirmation prompt. project.date is metadata only \u2014 it does not affect identity matching.",
+    "voice_id": "project.voice_id is the ElevenLabs voice ID used for the single full-video narration call. It must be provided in every script.",
+    "landscape_variant_note": "This script shares its title AND narration_text with the portrait version, on purpose \u2014 it should hit the 'same audio detected' cache path (no new ElevenLabs call needed) while still exercising the visual pipeline against a 1920x1080 canvas. pos/target_height_frac/target_width_frac values were re-laid-out for landscape (side-by-side composition) rather than scaled from the portrait version's stacked-vertical layout."
+  },
+  "project": {
+    "title": "Understanding GPU Architecture",
+    "date": "2026-09-15",
+    "tts_model": "eleven_flash_v2_5",
+    "voice_id": "fBD19tfE58bkETeiwUoC",
+    "aspect_ratio": "16:9",
+    "resolution": [1920, 1080],
+    "fps": 30,
+    "caption_style": {
+      "font": "Montserrat-Bold",
+      "font_size": 58,
+      "color": "#FFFFFF",
+      "stroke_color": "#000000",
+      "stroke_width": 3,
+      "position": "bottom_center",
+      "max_chars_per_line": 46,
+      "highlight_color": "#FFD700",
+      "highlight_scale": 1.15
+    }
+  },
+  "asset_registry": {
+    "bg_studio_default": "assets/backgrounds/default_studio.jpg",
+    "bg_cyber": "assets/backgrounds/cyberpunk_room.jpg",
+    "mrmouse_relaxed": "assets/sprites/mrmouse_relaxed.png",
+    "mrmouse_pointing": "assets/sprites/mrmouse_pointing.png",
+    "mrmouse_laptop": "assets/sprites/mrmouse_laptop.png",
+    "mrmouse_excited": "assets/sprites/mrmouse_excited.png",
+    "img_gpu_diagram": "assets/images/gpu_core_diagram.jpg",
+    "img_core_grid": "assets/images/gpu_core_grid.jpg",
+    "sfx_pop": "assets/audio/sfx/pop.mp3",
+    "sfx_whoosh": "assets/audio/sfx/whoosh.mp3",
+    "music_main": "assets/audio/monkeys_spinning_monkeys.mp3"
+  },
+  "scenes": [
+    {
+      "id": "scene_1_intro",
+      "bg": "bg_studio_default",
+      "narration_text": "Hey everyone, welcome back to the channel! Let's talk about GPUs today.",
+      "caption_text": null,
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "bg_music": {
+        "asset": "music_main",
+        "trigger_word_index": 0,
+        "volume": 0.25,
+        "fade_in_sec": 1.0
+      },
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_relaxed",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [960, 960], "target_height_frac": 0.60, "opacity": 0.0, "easing": "instant" },
+            { "trigger_word_index": 1, "pos": [960, 960], "target_height_frac": 0.60, "opacity": 1.0, "easing": "ease_out" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_2_setup",
+      "bg": "bg_cyber",
+      "narration_text": "Inside every GPU there are thousands of tiny cores working together to get things done.",
+      "caption_text": null,
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.3,
+      "transition_in": { "type": "crossfade", "duration_sec": 0.4 },
+      "bg_music": null,
+      "sfx": [
+        { "asset": "sfx_pop", "trigger_word_index": 8, "volume": 0.7 }
+      ],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [960, 960], "target_height_frac": 0.62, "opacity": 1.0, "easing": "instant" },
+            { "trigger_word_index": 5, "pos": [430, 960], "target_height_frac": 0.62, "opacity": 1.0, "easing": "ease_in_out" }
+          ]
+        },
+        {
+          "id": "gpu_diagram",
+          "asset": "img_gpu_diagram",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            { "trigger_word_index": 5, "pos": [1330, 470], "target_width_frac": 0.03, "opacity": 0.0, "easing": "instant" },
+            { "trigger_word_index": 6, "pos": [1330, 470], "target_width_frac": 0.34, "opacity": 1.0, "easing": "bounce" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_3_contrast",
+      "bg": "bg_studio_default",
+      "narration_text": "Your CPU has a few powerful cores, but a GPU trades raw power for sheer numbers instead.",
+      "caption_text": null,
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.3,
+      "transition_in": { "type": "crossfade", "duration_sec": 0.4 },
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_laptop",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [1450, 960], "target_height_frac": 0.63, "opacity": 1.0, "easing": "instant" }
+          ]
+        },
+        {
+          "id": "gpu_diagram_small",
+          "asset": "img_gpu_diagram",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [230, 210], "target_width_frac": 0.14, "opacity": 1.0, "easing": "instant" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_4_payoff",
+      "bg": "bg_cyber",
+      "narration_text": "That means thousands of calculations can happen at the exact same time, all at once!",
+      "caption_text": "THOUSANDS of calculations. ALL AT ONCE.",
+      "caption_style": {
+        "font_size": 68,
+        "highlight_color": "#00E5FF"
+      },
+      "duration_sec": null,
+      "pause_before_sec": 0.4,
+      "transition_in": { "type": "crossfade", "duration_sec": 0.35 },
+      "bg_music": {
+        "asset": "music_main",
+        "trigger_word_index": 0,
+        "volume": 0.4,
+        "fade_in_sec": 0.5
+      },
+      "sfx": [
+        { "asset": "sfx_whoosh", "trigger_word_index": 0, "volume": 0.6 }
+      ],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_excited",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [650, 1020], "target_height_frac": 0.35, "opacity": 0.0, "easing": "instant" },
+            { "trigger_word_index": 1, "pos": [650, 960], "target_height_frac": 0.62, "opacity": 1.0, "easing": "bounce" }
+          ]
+        },
+        {
+          "id": "core_grid",
+          "asset": "img_core_grid",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [1330, 500], "target_width_frac": 0.20, "opacity": 0.0, "easing": "instant" },
+            { "trigger_word_index": 2, "pos": [1330, 500], "target_width_frac": 0.30, "opacity": 1.0, "easing": "ease_out" },
+            { "trigger_word_index": 7, "pos": [1330, 500], "target_width_frac": 0.37, "opacity": 1.0, "easing": "ease_in_out" },
+            { "trigger_word_index": 14, "pos": [1330, 500], "target_width_frac": 0.40, "opacity": 1.0, "easing": "bounce" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_5_wrapup",
+      "bg": "bg_studio_default",
+      "narration_text": "This is exactly why GPUs are perfect for rendering graphics, and increasingly for training AI models too.",
+      "caption_text": null,
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.3,
+      "transition_in": { "type": "crossfade", "duration_sec": 0.4 },
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [430, 960], "target_height_frac": 0.60, "opacity": 1.0, "easing": "instant" }
+          ]
+        },
+        {
+          "id": "gpu_diagram_fadeout",
+          "asset": "img_gpu_diagram",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [1330, 470], "target_width_frac": 0.20, "opacity": 1.0, "easing": "instant" },
+            { "trigger_word_index": 5, "pos": [1330, 470], "target_width_frac": 0.07, "opacity": 0.0, "easing": "ease_in" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_6_outro",
+      "bg": "bg_studio_default",
+      "narration_text": "Thanks so much for watching, and I will catch you in the next one. Bye for now!",
+      "caption_text": null,
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.4,
+      "transition_in": { "type": "crossfade", "duration_sec": 0.5 },
+      "bg_music": {
+        "asset": "music_main",
+        "trigger_word_index": 0,
+        "volume": 0.0,
+        "fade_in_sec": 1.5
+      },
+      "sfx": [
+        { "asset": "sfx_pop", "trigger_word_index": 14, "volume": 0.6 }
+      ],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_relaxed",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [960, 960], "target_height_frac": 0.63, "opacity": 1.0, "easing": "instant" }
+          ]
+        }
+      ]
+    }
+  ]
+}

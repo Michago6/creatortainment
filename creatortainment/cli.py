@@ -54,16 +54,17 @@ def render_command(script_path: Path, output: Path | None) -> int:
             print(f"- {error}", file=sys.stderr)
         return 1
 
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    project_dir = PROJECTS_ROOT / f"{project_slug(script['project']['title'])}-{timestamp}"
-    project_dir.mkdir(parents=True, exist_ok=False)
+    project_dir = PROJECTS_ROOT / project_slug(script["project"]["title"])
+    project_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(script_path, project_dir / "script.json")
     destination = output or (project_dir / "output" / "storyboard.png")
     if not destination.is_absolute():
         destination = project_dir / destination
     render_storyboard(script, ASSETS_ROOT, destination)
-    write_manifest(script, project_dir, destination)
-    print(f"Created project: {project_dir}")
+    manifest_path = project_dir / "build_manifest.json"
+    if not manifest_path.exists():
+        write_manifest(script, project_dir)
+    print(f"Project: {project_dir}")
     print(f"Mock render: {destination}")
     return 0
 
