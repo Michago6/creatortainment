@@ -47,8 +47,8 @@ def test_alignment_slices_example_scenes() -> None:
     ]
     assert aligned[0].start_time_sec == 0.0
     assert aligned[0].end_time_sec == 4.75
-    assert aligned[1].start_time_sec == 4.8 + 0.4
-    assert aligned[2].start_time_sec == 7.8 + 0.3 + 0.4
+    assert aligned[1].start_time_sec == 4.8
+    assert aligned[2].start_time_sec == 7.8
 
 
 class CountingClient:

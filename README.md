@@ -30,10 +30,19 @@ of them with:
 python3 -m creatortainment validate scripts/example_scripts/example_script.json
 ```
 
-Create the first dependency-light storyboard mock:
+Generate narration and alignment first:
 
 ```bash
-python3 -m creatortainment render scripts/example_scripts/example_script.json
+python3 -m creatortainment align \
+  scripts/example_scripts/example_script.json
+```
+
+Then render a fast first MP4 preview:
+
+```bash
+python3 -m creatortainment render \
+  scripts/example_scripts/example_script.json \
+  --preview
 ```
 
 ## Running tests
@@ -101,12 +110,16 @@ Flags:
 python3 -m creatortainment render <script.json>
 ```
 
-Creates the current dependency-light storyboard PNG.
+Builds all scenes with their static layouts, captions, and narration audio,
+then writes one MP4 with hard cuts between scenes. Run `align` for the same
+script first so its build manifest and active narration are available.
 
 Flags:
 
-- `--out <path>` — choose the output PNG path relative to the generated
-  project directory.
+- `--out <path>` — choose the output MP4 path relative to the project
+  directory. The default is `output/video.mp4`.
+- `--preview` — render at quarter resolution with a reduced frame rate and
+  faster encoding for quick checks.
 - `-h`, `--help` — show command help.
 
 ### `align`
@@ -135,16 +148,18 @@ python3 -m creatortainment render --help
 python3 -m creatortainment align --help
 ```
 
-Each render creates a folder like:
+Each project uses a stable folder like:
 
 ```text
-projects/understanding-gpu-architecture-20260916-132445/
+projects/understanding_gpu_architecture/
 ├── script.json
 ├── build_manifest.json
-└── output/storyboard.png
+├── build_manifests/
+└── output/video.mp4
 ```
 
-The current `render` command creates a storyboard PNG and mock manifest.
-ElevenLabs narration and word alignment are available through `align`.
-MoviePy-based final video rendering, animated timelines, captions, and mixed
-audio are still upcoming phases.
+Use the script-specific manifest under `build_manifests/` when available;
+rendering falls back to the legacy project-level manifest for older projects.
+The current MoviePy renderer uses static first-keyframe layouts, static
+captions, and narration audio. Animated timelines, word highlighting, and
+mixed music/SFX audio are still upcoming phases.

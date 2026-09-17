@@ -9,17 +9,18 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .render.mock import render_storyboard, write_manifest
 from .audio.alignment import align_scenes
 from .audio.elevenlabs_client import ElevenLabsNarrationClient
-from .audio.manifest import DEFAULT_TTS_MODEL, narration_hash, write_manifest
+from .audio.manifest import DEFAULT_TTS_MODEL, narration_hash, read_manifest, write_manifest
 from .project_identity import (
     new_state,
     project_state_path,
     read_project_state,
     slugify,
+    variant_manifest_path,
     write_project_state,
 )
+from .render.moviepy_scene import build_full_video_clip
 from .schema.validate import load_script, validate_script
 
 
@@ -45,7 +46,7 @@ def validate_command(script_path: Path) -> int:
     return 1
 
 
-def render_command(script_path: Path, output: Path | None) -> int:
+def render_command(script_path: Path, output: Path | None, preview: bool) -> int:
     script = load_script(script_path)
     result = validate_script(script, ASSETS_ROOT)
     if not result.valid:
@@ -57,15 +58,37 @@ def render_command(script_path: Path, output: Path | None) -> int:
     project_dir = PROJECTS_ROOT / project_slug(script["project"]["title"])
     project_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(script_path, project_dir / "script.json")
-    destination = output or (project_dir / "output" / "storyboard.png")
+    destination = output or (project_dir / "output" / "video.mp4")
     if not destination.is_absolute():
         destination = project_dir / destination
-    render_storyboard(script, ASSETS_ROOT, destination)
-    manifest_path = project_dir / "build_manifest.json"
-    if not manifest_path.exists():
-        write_manifest(script, project_dir)
+    manifest_path = variant_manifest_path(project_dir, script_path)
+    if not manifest_path.is_file():
+        manifest_path = project_dir / "build_manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(
+            f"No build manifest found for {script_path}. "
+            "Run align for this script before rendering."
+        )
+    manifest = read_manifest(manifest_path)
+    clip = build_full_video_clip(script, manifest, ASSETS_ROOT, project_dir)
+    encoded_clip = clip.resized(0.25) if preview else clip
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fps = int(script["project"]["fps"])
+    encoded_clip.write_videofile(
+        str(destination),
+        fps=min(fps, 15) if preview else fps,
+        codec="libx264",
+        audio_codec="aac",
+        preset="ultrafast" if preview else "medium",
+        logger="bar",
+    )
+    if encoded_clip is not clip:
+        encoded_clip.close()
+    clip.close()
     print(f"Project: {project_dir}")
-    print(f"Mock render: {destination}")
+    print(f"Video render: {destination}")
+    if preview:
+        print("Preview mode: quarter resolution, reduced frame rate, and fast encoding.")
     return 0
 
 
@@ -80,6 +103,41 @@ def read_api_key(path: Path) -> str:
         if value and not value.startswith("#"):
             return value
     raise RuntimeError(f"ElevenLabs API key file is empty: {path}")
+
+
+def repair_cached_manifest_timing(
+    script: dict,
+    manifest_path: Path,
+    project_dir: Path,
+) -> bool:
+    """Rewrite stale scene offsets from raw timestamps without calling ElevenLabs."""
+    manifest = read_manifest(manifest_path)
+    audio_path = Path(manifest["narration_audio_path"])
+    if not audio_path.is_absolute():
+        audio_path = project_dir / audio_path
+    if not audio_path.is_file():
+        raise FileNotFoundError(f"Narration audio file does not exist: {audio_path}")
+    from moviepy import AudioFileClip
+
+    audio = AudioFileClip(str(audio_path))
+    try:
+        final_end = max(
+            (float(scene["end_time_sec"]) for scene in manifest.get("scenes", [])),
+            default=0.0,
+        )
+        if final_end <= audio.duration + 0.001:
+            return False
+    finally:
+        audio.close()
+
+    timestamps = manifest.get("word_timestamps")
+    if not isinstance(timestamps, list):
+        raise ValueError(f"Cached manifest has no usable word_timestamps: {manifest_path}")
+    manifest["scenes"] = [
+        scene.to_dict() for scene in align_scenes(script["scenes"], timestamps)
+    ]
+    write_manifest(manifest_path, manifest)
+    return True
 
 
 def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
@@ -122,8 +180,24 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
             print("Update cancelled; no files were changed.")
             return 0
         if same:
+            legacy_manifest = project_dir / "build_manifest.json"
+            variant_path = variant_manifest_path(project_dir, script_path)
+            if legacy_manifest.is_file() and not variant_path.is_file():
+                variant_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(legacy_manifest, variant_path)
+            if variant_path.is_file():
+                manifest_path = variant_path
+            elif legacy_manifest.is_file():
+                manifest_path = legacy_manifest
+            else:
+                raise FileNotFoundError(
+                    f"Cached narration manifest not found in {project_dir}."
+                )
+            repaired = repair_cached_manifest_timing(script, manifest_path, project_dir)
             state.update({"title": title, "date": script["project"].get("date"), "updated_at": datetime.now(timezone.utc).isoformat()})
             write_project_state(project_state_path(project_dir), state)
+            if repaired:
+                print("Cached manifest timing was repaired from the existing narration.")
             print("Project metadata updated; existing narration remains active.")
             return 0
     elif not existing:
@@ -164,6 +238,7 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
         "scenes": [scene.to_dict() for scene in align_scenes(script["scenes"], timestamps)],
     }
     write_manifest(project_dir / "build_manifest.json", manifest)
+    write_manifest(variant_manifest_path(project_dir, script_path), manifest)
     state = new_state(script, now)
     write_project_state(project_state_path(project_dir), state)
     print(f"Generated narration: {audio_path}")
@@ -176,9 +251,14 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     validate = commands.add_parser("validate", help="Validate a script and all shared assets.")
     validate.add_argument("script", type=Path)
-    render = commands.add_parser("render", help="Create a project and render a mock storyboard.")
+    render = commands.add_parser("render", help="Render the script to an MP4 video.")
     render.add_argument("script", type=Path)
-    render.add_argument("--out", type=Path, help="Output PNG path relative to the new project.")
+    render.add_argument("--out", type=Path, help="Output MP4 path relative to the project.")
+    render.add_argument(
+        "--preview",
+        action="store_true",
+        help="Render at quarter resolution with faster encoding settings.",
+    )
     align = commands.add_parser("align", help="Generate or reuse the full-video narration manifest.")
     align.add_argument("script", type=Path)
     align.add_argument("--force-audio", action="store_true", help="Always create a new narration without confirmation.")
@@ -191,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "validate":
         return validate_command(args.script)
     if args.command == "render":
-        return render_command(args.script, args.out)
+        return render_command(args.script, args.out, args.preview)
     if args.command == "align":
         return align_command(args.script, args.force_audio, args.debug)
     return 2

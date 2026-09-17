@@ -9,3 +9,4 @@ storyboard.png
 generated_images/
 projects/
 archive/
+.pytest_cache/

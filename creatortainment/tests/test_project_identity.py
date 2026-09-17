@@ -2,7 +2,15 @@
 
 from datetime import datetime, timezone
 
-from creatortainment.project_identity import new_state, project_state_path, slugify, write_project_state
+from pathlib import Path
+
+from creatortainment.project_identity import (
+    new_state,
+    project_state_path,
+    slugify,
+    variant_manifest_path,
+    write_project_state,
+)
 
 
 def test_new_project_state_contains_stable_identity_data(tmp_path) -> None:
@@ -18,3 +26,12 @@ def test_new_project_state_contains_stable_identity_data(tmp_path) -> None:
     assert project_state_path(project_dir).is_file()
     assert state["title"] == "My Video!"
     assert state["tts_model"] == "eleven_flash_v2_5"
+
+
+def test_variant_manifest_paths_are_separate_within_one_project(tmp_path: Path) -> None:
+    """Different script filenames get separate manifests under one stable project."""
+    project_dir = tmp_path / "my_video"
+    portrait = variant_manifest_path(project_dir, Path("example_script.json"))
+    landscape = variant_manifest_path(project_dir, Path("example_script_extended_horizontal.json"))
+    assert portrait != landscape
+    assert portrait.parent == landscape.parent == project_dir / "build_manifests"

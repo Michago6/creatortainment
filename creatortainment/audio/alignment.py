@@ -29,7 +29,6 @@ def align_scenes(
 ) -> list[SceneAlignment]:
     result: list[SceneAlignment] = []
     global_offset = 0
-    pause_offset = 0.0
     for scene_number, scene in enumerate(scenes):
         words = tokenize(scene["narration_text"])
         word_count = len(words)
@@ -42,11 +41,8 @@ def align_scenes(
         if word_count == 0:
             raise ValueError(f"Scene {scene.get('id', scene_number)!r} has no narration words.")
         scene_timestamps = word_timestamps[global_offset:end_offset]
-        pause = scene.get("pause_before_sec", pause_default_sec)
-        if not isinstance(pause, (int, float)) or pause < 0:
-            raise ValueError(f"Scene {scene.get('id', scene_number)!r} has an invalid pause.")
-        start = float(scene_timestamps[0]["start"]) + pause_offset + float(pause)
-        end = float(scene_timestamps[-1]["end"]) + pause_offset + float(pause)
+        start = float(scene_timestamps[0]["start"])
+        end = float(scene_timestamps[-1]["end"])
         result.append(
             SceneAlignment(
                 id=str(scene["id"]),
@@ -57,7 +53,6 @@ def align_scenes(
                 duration_sec=end - start,
             )
         )
-        pause_offset += float(pause)
         global_offset = end_offset
     if global_offset != len(word_timestamps):
         raise ValueError(

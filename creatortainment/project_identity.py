@@ -23,6 +23,12 @@ def project_state_path(project_dir: Path) -> Path:
     return project_dir / "project_state.json"
 
 
+def variant_manifest_path(project_dir: Path, script_path: Path) -> Path:
+    """Return build metadata storage unique to one script filename variant."""
+    safe_name = re.sub(r"[^\w.-]+", "_", script_path.stem, flags=re.UNICODE)
+    return project_dir / "build_manifests" / f"{safe_name}.json"
+
+
 def read_project_state(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
