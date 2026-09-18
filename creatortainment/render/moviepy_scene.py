@@ -5,17 +5,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from moviepy import (
     AudioFileClip,
     AudioClip,
     CompositeVideoClip,
     ImageClip,
     TextClip,
+    VideoClip,
     concatenate_videoclips,
 )
-from PIL import ImageFont
+from PIL import Image, ImageFont
 
 from .mock import AssetDimensionCache, _asset_path
+from .keyframes import resolve_element_state
+from ..timeline import timed_element
 
 
 def _cover_background(path: Path, resolution: tuple[int, int], duration: float) -> ImageClip:
@@ -72,30 +76,111 @@ def _element_clip(
     return image.with_position(position).with_duration(duration)
 
 
+def _animated_element_clip(
+    element: dict[str, Any],
+    scene: dict[str, Any],
+    scene_manifest: dict[str, Any],
+    manifest: dict[str, Any],
+    registry: dict[str, Any],
+    assets_root: Path,
+    resolution: tuple[int, int],
+    duration: float,
+    dimension_cache: AssetDimensionCache,
+) -> VideoClip:
+    """Create a full-canvas dynamic clip driven by resolved element states."""
+    path = _asset_path(registry, element["asset"], assets_root)
+    source = Image.open(path).convert("RGBA")
+    timed = timed_element(element, scene, scene_manifest, manifest)
+    canvas_width, canvas_height = resolution
+    native_width, native_height = dimension_cache.dimensions(path)
+
+    def render_rgba(local_time: float) -> Image.Image:
+        absolute_time = float(scene_manifest["start_time_sec"]) + local_time
+        state = resolve_element_state(timed, absolute_time)
+        size_field = state["size_field_name"]
+        if size_field == "target_height_frac":
+            height = max(1, round(state["size_value"] * canvas_height))
+            width = max(1, round(native_width * height / native_height))
+        else:
+            width = max(1, round(state["size_value"] * canvas_width))
+            height = max(1, round(native_height * width / native_width))
+        image = source.resize((width, height), Image.Resampling.LANCZOS)
+        opacity = max(0.0, min(1.0, state["opacity"]))
+        if opacity != 1.0:
+            alpha = image.getchannel("A").point(lambda value: round(value * opacity))
+            image.putalpha(alpha)
+        x, y = state["pos"]
+        anchor = element["anchor"]
+        if anchor == "top_left":
+            left, top = round(x), round(y)
+        elif anchor == "bottom_center":
+            left, top = round(x - width / 2), round(y - height)
+        else:
+            left, top = round(x - width / 2), round(y - height / 2)
+        canvas = Image.new("RGBA", (canvas_width, canvas_height))
+        canvas.alpha_composite(image, (left, top))
+        return canvas
+
+    def frame(local_time: float) -> np.ndarray:
+        return np.asarray(render_rgba(local_time).convert("RGB"))
+
+    def mask_frame(local_time: float) -> np.ndarray:
+        return np.asarray(render_rgba(local_time).getchannel("A"), dtype=float) / 255.0
+
+    clip = VideoClip(
+        frame_function=frame,
+        duration=duration,
+        has_constant_size=True,
+    )
+    mask = VideoClip(
+        frame_function=mask_frame,
+        is_mask=True,
+        duration=duration,
+        has_constant_size=True,
+    )
+    return clip.with_mask(mask)
+
+
 def build_static_scene_clip(
     script: dict[str, Any],
     scene: dict[str, Any],
     scene_manifest: dict[str, Any],
     assets_root: Path,
+    manifest: dict[str, Any] | None = None,
 ):
-    """Build one full-resolution scene from background and first-keyframe layers."""
+    """Build one full-resolution scene with animated element layers."""
     resolution = tuple(script["project"]["resolution"])
     duration = float(scene_manifest["duration_sec"])
     registry = script["asset_registry"]
     background_path = _asset_path(registry, scene["bg"], assets_root)
     cache = AssetDimensionCache()
     layers = [_cover_background(background_path, resolution, duration)]
-    layers.extend(
-        _element_clip(
-            element,
-            registry,
-            assets_root,
-            resolution,
-            duration,
-            cache,
+    if manifest is None:
+        layers.extend(
+            _element_clip(
+                element, registry, assets_root, resolution, duration, cache
+            )
+            for element in sorted(
+                scene.get("elements", []), key=lambda item: item.get("z_index", 0)
+            )
         )
-        for element in sorted(scene.get("elements", []), key=lambda item: item.get("z_index", 0))
-    )
+    else:
+        layers.extend(
+            _animated_element_clip(
+                element,
+                scene,
+                scene_manifest,
+                manifest,
+                registry,
+                assets_root,
+                resolution,
+                duration,
+                cache,
+            )
+            for element in sorted(
+                scene.get("elements", []), key=lambda item: item.get("z_index", 0)
+            )
+        )
     layers.append(build_static_caption_clip(script, scene, resolution, duration))
     return CompositeVideoClip(layers, size=resolution).with_duration(duration)
 
@@ -230,6 +315,7 @@ def build_full_video_clip(
             scene,
             scene_manifest,
             assets_root,
+            manifest,
         )
         narrated_clip = attach_scene_narration(
             scene_clip,

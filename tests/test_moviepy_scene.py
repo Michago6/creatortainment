@@ -69,19 +69,10 @@ def test_full_video_concatenates_all_manifest_scenes_in_order() -> None:
     """The full clip duration equals the sum of all scene durations."""
     script = _script("example_script.json")
     manifest = json.loads(
-        (ROOT / "projects/understanding_gpu_architecture/build_manifest.json").read_text(
+        (ROOT / "projects/understanding_gpu_architecture/build_manifests/example_script.json").read_text(
             encoding="utf-8"
         )
     )
-    manifest["scenes"] = [
-        {
-            "id": scene["id"],
-            "start_time_sec": index * 2.0,
-            "end_time_sec": (index + 1) * 2.0,
-            "duration_sec": 2.0,
-        }
-        for index, scene in enumerate(manifest["scenes"])
-    ]
     clip = build_full_video_clip(script, manifest, ASSETS, ROOT / "projects/understanding_gpu_architecture")
     try:
         expected = sum(float(scene["duration_sec"]) for scene in manifest["scenes"])
