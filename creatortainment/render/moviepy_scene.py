@@ -93,8 +93,13 @@ def _animated_element_clip(
     timed = timed_element(element, scene, scene_manifest, manifest)
     canvas_width, canvas_height = resolution
     native_width, native_height = dimension_cache.dimensions(path)
+    cached_time: float | None = None
+    cached_frame: Image.Image | None = None
 
     def render_rgba(local_time: float) -> Image.Image:
+        nonlocal cached_time, cached_frame
+        if cached_time == local_time and cached_frame is not None:
+            return cached_frame
         absolute_time = float(scene_manifest["start_time_sec"]) + local_time
         state = resolve_element_state(timed, absolute_time)
         size_field = state["size_field_name"]
@@ -119,6 +124,8 @@ def _animated_element_clip(
             left, top = round(x - width / 2), round(y - height / 2)
         canvas = Image.new("RGBA", (canvas_width, canvas_height))
         canvas.alpha_composite(image, (left, top))
+        cached_time = local_time
+        cached_frame = canvas
         return canvas
 
     def frame(local_time: float) -> np.ndarray:

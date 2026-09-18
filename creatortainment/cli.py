@@ -30,6 +30,22 @@ PROJECTS_ROOT = REPO_ROOT / "projects"
 ELEVENLABS_API_KEY_PATH = REPO_ROOT / "elevenlabs_api_key.txt"
 
 
+def prepare_render_clip(clip, resolution: tuple[int, int], preview: bool):
+    """Select the explicit preview or full-resolution encoding path."""
+    encoded_clip = clip.resized(0.25) if preview else clip
+    expected_size = (
+        (round(resolution[0] * 0.25), round(resolution[1] * 0.25))
+        if preview
+        else resolution
+    )
+    if tuple(encoded_clip.size) != tuple(expected_size):
+        raise RuntimeError(
+            f"Render output size {encoded_clip.size} does not match expected "
+            f"{expected_size}."
+        )
+    return encoded_clip
+
+
 def project_slug(title: str) -> str:
     return slugify(title)
 
@@ -71,7 +87,11 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
         )
     manifest = read_manifest(manifest_path)
     clip = build_full_video_clip(script, manifest, ASSETS_ROOT, project_dir)
-    encoded_clip = clip.resized(0.25) if preview else clip
+    encoded_clip = prepare_render_clip(
+        clip,
+        tuple(script["project"]["resolution"]),
+        preview,
+    )
     destination.parent.mkdir(parents=True, exist_ok=True)
     fps = int(script["project"]["fps"])
     encoded_clip.write_videofile(
