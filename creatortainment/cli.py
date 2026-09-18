@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import shutil
 import sys
@@ -30,9 +31,34 @@ PROJECTS_ROOT = REPO_ROOT / "projects"
 ELEVENLABS_API_KEY_PATH = REPO_ROOT / "elevenlabs_api_key.txt"
 
 
+def scale_script_for_preview(script: dict) -> dict:
+    """Scale canvas coordinates and caption sizes before preview rendering."""
+    scaled = copy.deepcopy(script)
+    width, height = (int(value) for value in script["project"]["resolution"])
+    preview_width = max(1, round(width * 0.25))
+    preview_height = max(1, round(height * 0.25))
+    scaled["project"]["resolution"] = [preview_width, preview_height]
+
+    project_style = scaled["project"].get("caption_style")
+    if isinstance(project_style, dict) and "font_size" in project_style:
+        project_style["font_size"] = max(1, round(float(project_style["font_size"]) * 0.25))
+    for scene in scaled.get("scenes", []):
+        scene_style = scene.get("caption_style")
+        if isinstance(scene_style, dict) and "font_size" in scene_style:
+            scene_style["font_size"] = max(1, round(float(scene_style["font_size"]) * 0.25))
+        for element in scene.get("elements", []):
+            for keyframe in element.get("keyframes", []):
+                if isinstance(keyframe.get("pos"), list) and len(keyframe["pos"]) == 2:
+                    keyframe["pos"] = [
+                        float(keyframe["pos"][0]) * 0.25,
+                        float(keyframe["pos"][1]) * 0.25,
+                    ]
+    return scaled
+
+
 def prepare_render_clip(clip, resolution: tuple[int, int], preview: bool):
-    """Select the explicit preview or full-resolution encoding path."""
-    encoded_clip = clip.resized(0.25) if preview else clip
+    """Validate the explicitly selected preview or full-resolution path."""
+    encoded_clip = clip
     expected_size = (
         (round(resolution[0] * 0.25), round(resolution[1] * 0.25))
         if preview
@@ -86,7 +112,8 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
             "Run align for this script before rendering."
         )
     manifest = read_manifest(manifest_path)
-    clip = build_full_video_clip(script, manifest, ASSETS_ROOT, project_dir)
+    render_script = scale_script_for_preview(script) if preview else script
+    clip = build_full_video_clip(render_script, manifest, ASSETS_ROOT, project_dir)
     encoded_clip = prepare_render_clip(
         clip,
         tuple(script["project"]["resolution"]),

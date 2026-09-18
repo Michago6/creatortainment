@@ -76,6 +76,21 @@ def _element_clip(
     return image.with_position(position).with_duration(duration)
 
 
+def _anchor_position(
+    anchor: str,
+    x: float,
+    y: float,
+    width: int,
+    height: int,
+) -> tuple[int, int]:
+    """Convert an element anchor point to its MoviePy top-left position."""
+    if anchor == "top_left":
+        return round(x), round(y)
+    if anchor == "bottom_center":
+        return round(x - width / 2), round(y - height)
+    return round(x - width / 2), round(y - height / 2)
+
+
 def _animated_element_clip(
     element: dict[str, Any],
     scene: dict[str, Any],
@@ -87,7 +102,7 @@ def _animated_element_clip(
     duration: float,
     dimension_cache: AssetDimensionCache,
 ) -> VideoClip:
-    """Create a full-canvas dynamic clip driven by resolved element states."""
+    """Create a cropped dynamic clip driven by resolved element states."""
     path = _asset_path(registry, element["asset"], assets_root)
     source = Image.open(path).convert("RGBA")
     timed = timed_element(element, scene, scene_manifest, manifest)
@@ -95,9 +110,10 @@ def _animated_element_clip(
     native_width, native_height = dimension_cache.dimensions(path)
     cached_time: float | None = None
     cached_frame: Image.Image | None = None
+    cached_position: tuple[int, int] = (0, 0)
 
-    def render_rgba(local_time: float) -> Image.Image:
-        nonlocal cached_time, cached_frame
+    def render_element(local_time: float) -> Image.Image:
+        nonlocal cached_time, cached_frame, cached_position
         if cached_time == local_time and cached_frame is not None:
             return cached_frame
         absolute_time = float(scene_manifest["start_time_sec"]) + local_time
@@ -115,37 +131,35 @@ def _animated_element_clip(
             alpha = image.getchannel("A").point(lambda value: round(value * opacity))
             image.putalpha(alpha)
         x, y = state["pos"]
-        anchor = element["anchor"]
-        if anchor == "top_left":
-            left, top = round(x), round(y)
-        elif anchor == "bottom_center":
-            left, top = round(x - width / 2), round(y - height)
-        else:
-            left, top = round(x - width / 2), round(y - height / 2)
-        canvas = Image.new("RGBA", (canvas_width, canvas_height))
-        canvas.alpha_composite(image, (left, top))
+        cached_position = _anchor_position(element["anchor"], x, y, width, height)
         cached_time = local_time
-        cached_frame = canvas
-        return canvas
+        cached_frame = image
+        return image
 
     def frame(local_time: float) -> np.ndarray:
-        return np.asarray(render_rgba(local_time).convert("RGB"))
+        return np.asarray(render_element(local_time).convert("RGB"))
 
     def mask_frame(local_time: float) -> np.ndarray:
-        return np.asarray(render_rgba(local_time).getchannel("A"), dtype=float) / 255.0
+        return np.asarray(
+            render_element(local_time).getchannel("A"), dtype=float
+        ) / 255.0
+
+    def position(local_time: float) -> tuple[int, int]:
+        render_element(local_time)
+        return cached_position
 
     clip = VideoClip(
         frame_function=frame,
         duration=duration,
-        has_constant_size=True,
+        has_constant_size=False,
     )
     mask = VideoClip(
         frame_function=mask_frame,
         is_mask=True,
         duration=duration,
-        has_constant_size=True,
+        has_constant_size=False,
     )
-    return clip.with_mask(mask)
+    return clip.with_mask(mask).with_position(position)
 
 
 def build_static_scene_clip(

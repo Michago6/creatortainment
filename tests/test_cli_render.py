@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from moviepy import ColorClip
 
-from creatortainment.cli import prepare_render_clip
+from creatortainment.cli import prepare_render_clip, scale_script_for_preview
 
 
 def test_non_preview_render_keeps_project_resolution() -> None:
@@ -19,10 +19,33 @@ def test_non_preview_render_keeps_project_resolution() -> None:
 
 def test_preview_render_uses_quarter_resolution() -> None:
     """Preview rendering explicitly scales the clip to one-quarter resolution."""
-    clip = ColorClip((1920, 1080), color=(0, 0, 0), duration=0.1)
+    clip = ColorClip((480, 270), color=(0, 0, 0), duration=0.1)
     try:
         encoded = prepare_render_clip(clip, (1920, 1080), preview=True)
         assert encoded.size == (480, 270)
-        encoded.close()
     finally:
         clip.close()
+
+
+def test_preview_script_scales_canvas_positions_and_caption_sizes() -> None:
+    """Preview preparation scales visual coordinates before frame rendering."""
+    script = {
+        "project": {
+            "resolution": [1920, 1080],
+            "caption_style": {"font_size": 64},
+        },
+        "scenes": [
+            {
+                "caption_style": {"font_size": 76},
+                "elements": [
+                    {"keyframes": [{"pos": [1330, 470]}]},
+                ],
+            }
+        ],
+    }
+    preview = scale_script_for_preview(script)
+    assert preview["project"]["resolution"] == [480, 270]
+    assert preview["project"]["caption_style"]["font_size"] == 16
+    assert preview["scenes"][0]["caption_style"]["font_size"] == 19
+    assert preview["scenes"][0]["elements"][0]["keyframes"][0]["pos"] == [332.5, 117.5]
+    assert script["project"]["resolution"] == [1920, 1080]
