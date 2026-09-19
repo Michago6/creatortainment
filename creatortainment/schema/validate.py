@@ -34,6 +34,15 @@ def _validate_caption_style(style: Any, path: str, errors: list[str]) -> None:
         errors.append(f"{path}.words_per_chunk must be a positive integer.")
 
 
+def _validate_duck_pct(value: Any, path: str, errors: list[str]) -> None:
+    if value is not None and (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not 0.0 <= value <= 1.0
+    ):
+        errors.append(f"{path} must be between 0 and 1 or null.")
+
+
 @dataclass(frozen=True)
 class ValidationResult:
     script: dict[str, Any]
@@ -97,6 +106,11 @@ def validate_script(script: dict[str, Any], assets_root: Path) -> ValidationResu
         scenes = []
     if isinstance(project, dict):
         _validate_caption_style(project.get("caption_style"), "project.caption_style", errors)
+        _validate_duck_pct(
+            project.get("duck_to_narration_pct"),
+            "project.duck_to_narration_pct",
+            errors,
+        )
 
     asset_paths: dict[str, Path] = {}
     for key, relative_path in registry.items():
@@ -133,6 +147,11 @@ def validate_script(script: dict[str, Any], assets_root: Path) -> ValidationResu
             f"{prefix}.caption_style",
             errors,
         )
+        _validate_duck_pct(
+            scene.get("duck_to_narration_pct"),
+            f"{prefix}.duck_to_narration_pct",
+            errors,
+        )
 
         def check_asset(field_path: str, key: Any) -> None:
             if not isinstance(key, str) or key not in registry:
@@ -144,7 +163,16 @@ def validate_script(script: dict[str, Any], assets_root: Path) -> ValidationResu
             if not isinstance(bg_music, dict):
                 errors.append(f"{prefix}.bg_music must be an object or null.")
             else:
-                check_asset(f"{prefix}.bg_music.asset", bg_music.get("asset"))
+                stop = bg_music.get("stop", False)
+                if not isinstance(stop, bool):
+                    errors.append(f"{prefix}.bg_music.stop must be a boolean.")
+                if stop:
+                    if "asset" in bg_music:
+                        errors.append(f"{prefix}.bg_music.stop cues cannot specify asset.")
+                else:
+                    check_asset(f"{prefix}.bg_music.asset", bg_music.get("asset"))
+                if "volume" in bg_music:
+                    errors.append(f"{prefix}.bg_music no longer supports volume.")
                 error = _index_error(
                     f"{prefix}.bg_music.trigger_word_index",
                     bg_music.get("trigger_word_index"),

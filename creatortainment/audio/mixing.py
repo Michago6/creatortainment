@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 from moviepy import AudioClip, AudioFileClip, CompositeAudioClip
@@ -24,21 +24,22 @@ class MusicEvent:
     """A resolved background-music change event."""
 
     time_sec: float
-    asset: str
-    volume: float
+    asset: str | None
+    stop: bool
     fade_in_sec: float
 
 
 @dataclass(frozen=True)
 class MusicSegment:
-    """One music source stretch and its baseline gain envelope."""
+    """One music source stretch and its normalized gain envelope."""
 
     start_sec: float
     end_sec: float
     asset: str
-    volume: float
-    fade_from_volume: float
+    target_gain: float
+    fade_from_gain: float
     fade_in_sec: float
+    duck_to_narration_pct: float
 
 
 def _final_video_duration(scene_offsets: list[SceneOffset]) -> float:
@@ -64,11 +65,14 @@ def build_music_events(
             manifest,
             scene_offsets,
         )
+        stop = bool(music.get("stop", False))
+        if not stop and not isinstance(music.get("asset"), str):
+            raise ValueError("A background music change must specify an asset or stop=true.")
         events.append(
             MusicEvent(
                 time_sec=event_time,
-                asset=str(music["asset"]),
-                volume=float(music.get("volume", 1.0)),
+                asset=None if stop else str(music["asset"]),
+                stop=stop,
                 fade_in_sec=max(0.0, float(music.get("fade_in_sec", 0.0))),
             )
         )
@@ -86,24 +90,51 @@ def build_music_segments(
         return []
     end_sec = _final_video_duration(scene_offsets)
     segments: list[MusicSegment] = []
-    previous_volume = 0.0
+    active_asset: str | None = None
     for index, event in enumerate(events):
         end = events[index + 1].time_sec if index + 1 < len(events) else end_sec
         if end <= event.time_sec:
             continue
-        fade_from = previous_volume if segments and segments[-1].asset == event.asset else 0.0
+        if event.stop:
+            if active_asset is None:
+                continue
+            asset = active_asset
+            target_gain = 0.0
+            fade_from_gain = 1.0
+        else:
+            asset = event.asset
+            if asset is None:
+                continue
+            target_gain = 1.0
+            fade_from_gain = 1.0 if active_asset == asset else 0.0
+            active_asset = asset
+        scene_index = next(
+            (
+                offset.scene_index
+                for offset in reversed(scene_offsets)
+                if offset.narration_start_sec <= event.time_sec
+            ),
+            0,
+        )
         segments.append(
             MusicSegment(
                 start_sec=event.time_sec,
                 end_sec=end,
-                asset=event.asset,
-                volume=max(0.0, event.volume),
-                fade_from_volume=fade_from,
+                asset=asset,
+                target_gain=target_gain,
+                fade_from_gain=fade_from_gain,
                 fade_in_sec=min(event.fade_in_sec, end - event.time_sec),
+                duck_to_narration_pct=_effective_duck_pct(script, scene_index),
             )
         )
-        previous_volume = max(0.0, event.volume)
     return segments
+
+
+def _effective_duck_pct(script: dict[str, Any], scene_index: int) -> float:
+    project_pct = float(script.get("project", {}).get("duck_to_narration_pct", 0.3))
+    scene = script.get("scenes", [])[scene_index]
+    override = scene.get("duck_to_narration_pct")
+    return project_pct if override is None else float(override)
 
 
 def _narration_intervals(scene_offsets: list[SceneOffset]) -> list[tuple[float, float]]:
@@ -120,7 +151,7 @@ def _is_narration_time(time_sec: float, intervals: list[tuple[float, float]]) ->
 def music_gain_at_time(
     segment: MusicSegment,
     time_sec: float | np.ndarray,
-    duck_gain: float,
+    duck_gain: float | Callable[[np.ndarray], float | np.ndarray],
     narration_intervals: list[tuple[float, float]],
 ) -> float | np.ndarray:
     """Return the continuously ducked gain for an active music segment."""
@@ -128,13 +159,16 @@ def music_gain_at_time(
     elapsed = times - segment.start_sec
     if segment.fade_in_sec > 0.0:
         progress = np.minimum(1.0, np.maximum(0.0, elapsed / segment.fade_in_sec))
-        baseline = segment.fade_from_volume + (
-            segment.volume - segment.fade_from_volume
+        baseline = segment.fade_from_gain + (
+            segment.target_gain - segment.fade_from_gain
         ) * progress
     else:
-        baseline = np.full_like(times, segment.volume)
+        baseline = np.full_like(times, segment.target_gain)
     in_segment = (times >= segment.start_sec) & (times < segment.end_sec)
-    gains = np.where(in_segment, baseline * duck_gain, 0.0)
+    resolved_duck_gain = (
+        duck_gain(times) if callable(duck_gain) else duck_gain
+    )
+    gains = np.where(in_segment, baseline * resolved_duck_gain, 0.0)
     return float(gains) if gains.ndim == 0 else gains
 
 
@@ -261,30 +295,59 @@ def build_background_music_track(
     if not segments:
         return _silence(duration)
     cache = loudness_cache or LoudnessCache()
-    duck_pct = float(script.get("project", {}).get("duck_to_narration_pct", 0.3))
-    intervals = _narration_intervals(scene_offsets)
     clips = []
     registry = script["asset_registry"]
     for segment in segments:
         path = _asset_path(registry, segment.asset, assets_root)
         music_loudness = cache.measure(path)
-        duck_gain = compute_duck_gain(narration_loudness, music_loudness, duck_pct)
+        duck_gain_cache: dict[float, float] = {}
+
+        def duck_gain_for_times(
+            absolute_times: np.ndarray,
+            *,
+            segment=segment,
+            music_loudness=music_loudness,
+        ) -> float | np.ndarray:
+            times = np.asarray(absolute_times, dtype=float)
+            gains = np.empty_like(times)
+            for offset in scene_offsets:
+                scene_start = offset.final_start_sec
+                scene_end = offset.narration_end_sec
+                mask = (times >= scene_start) & (times < scene_end)
+                if not np.any(mask):
+                    continue
+                scene = script["scenes"][offset.scene_index]
+                override = scene.get("duck_to_narration_pct")
+                duck_pct = (
+                    segment.duck_to_narration_pct
+                    if override is None
+                    else float(override)
+                )
+                if duck_pct not in duck_gain_cache:
+                    duck_gain_cache[duck_pct] = compute_duck_gain(
+                        narration_loudness,
+                        music_loudness,
+                        duck_pct,
+                    )
+                gains[mask] = duck_gain_cache[duck_pct]
+            return float(gains) if gains.ndim == 0 else gains
+
         segment_duration = segment.end_sec - segment.start_sec
         source = AudioFileClip(str(path))
         looped = source.with_effects([AudioLoop(duration=segment_duration)])
 
-        def gain_frame(get_frame, local_time, segment=segment, duck_gain=duck_gain):
+        def gain_frame(get_frame, local_time, segment=segment):
             local_times = np.asarray(local_time, dtype=float)
             absolute_times = segment.start_sec + local_times
             elapsed = absolute_times - segment.start_sec
             if segment.fade_in_sec > 0.0:
                 progress = np.minimum(1.0, elapsed / segment.fade_in_sec)
-                baseline = segment.fade_from_volume + (
-                    segment.volume - segment.fade_from_volume
+                baseline = segment.fade_from_gain + (
+                    segment.target_gain - segment.fade_from_gain
                 ) * progress
             else:
-                baseline = np.full_like(absolute_times, segment.volume)
-            gains = baseline * duck_gain
+                baseline = np.full_like(absolute_times, segment.target_gain)
+            gains = baseline * duck_gain_for_times(absolute_times)
             frames = get_frame(local_time)
             if gains.ndim == 0:
                 return frames * float(gains)
