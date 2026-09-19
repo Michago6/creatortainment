@@ -16,6 +16,11 @@ DEFAULT_TTS_MODEL = "eleven_flash_v2_5"
 def narration_hash(script: dict[str, Any]) -> str:
     text, _ = narration_text_and_pauses(script["scenes"])
     model = script.get("project", {}).get("tts_model", DEFAULT_TTS_MODEL)
+    return narration_hash_for_text(text, model)
+
+
+def narration_hash_for_text(text: str, model: str = DEFAULT_TTS_MODEL) -> str:
+    """Return the cache hash used for narration sidecar text and model."""
     return hashlib.sha256(f"{text}\n{model}".encode("utf-8")).hexdigest()
 
 

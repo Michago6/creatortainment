@@ -17,6 +17,12 @@ from moviepy import (
 )
 from PIL import Image, ImageFont
 
+from .captions import (
+    CaptionImageCache,
+    caption_position,
+    resolve_active_caption,
+    wrap_caption_lines,
+)
 from .mock import AssetDimensionCache, _asset_path
 from .keyframes import resolve_element_state
 from ..timeline import timed_element
@@ -202,7 +208,19 @@ def build_static_scene_clip(
                 scene.get("elements", []), key=lambda item: item.get("z_index", 0)
             )
         )
-    layers.append(build_static_caption_clip(script, scene, resolution, duration))
+    if manifest is None:
+        layers.append(build_static_caption_clip(script, scene, resolution, duration))
+    else:
+        layers.append(
+            build_animated_caption_clip(
+                script,
+                scene,
+                scene_manifest,
+                manifest,
+                resolution,
+                duration,
+            )
+        )
     return CompositeVideoClip(layers, size=resolution).with_duration(duration)
 
 
@@ -248,6 +266,85 @@ def resolve_caption_style(script: dict[str, Any], scene: dict[str, Any]) -> dict
     return {**project_style, **scene_style}
 
 
+def build_animated_caption_clip(
+    script: dict[str, Any],
+    scene: dict[str, Any],
+    scene_manifest: dict[str, Any],
+    manifest: dict[str, Any],
+    resolution: tuple[int, int],
+    duration: float,
+) -> VideoClip:
+    """Build a cached, word-highlighted caption layer for an aligned scene."""
+    style = resolve_caption_style(script, scene)
+    chunks = wrap_caption_lines(
+        caption_text_for_scene(scene),
+        int(style.get("words_per_chunk", 3)),
+        (
+            int(style["max_chars_per_line"])
+            if style.get("max_chars_per_line") is not None
+            else None
+        ),
+    )
+    timestamps = manifest.get("word_timestamps")
+    if not isinstance(timestamps, list):
+        raise ValueError("Manifest must contain word_timestamps for animated captions.")
+    image_cache = CaptionImageCache(style, resolution)
+    cached_time: float | None = None
+    cached_rendered = None
+    cached_active: tuple[int, int] | None = None
+
+    def resolve_frame(local_time: float):
+        nonlocal cached_time, cached_rendered, cached_active
+        if cached_time == local_time:
+            return cached_rendered, cached_active
+        absolute_time = float(scene_manifest["start_time_sec"]) + local_time
+        active = resolve_active_caption(
+            scene,
+            absolute_time,
+            chunks,
+            timestamps,
+            word_offset=int(scene_manifest["word_offset"]),
+        )
+        rendered = None if active is None else image_cache.get(chunks[active[0]], active[1])
+        cached_time = local_time
+        cached_active = active
+        cached_rendered = rendered
+        return rendered, active
+
+    def frame(local_time: float) -> np.ndarray:
+        rendered, _ = resolve_frame(float(local_time))
+        if rendered is None:
+            return np.zeros((1, 1, 3), dtype=np.uint8)
+        return np.asarray(rendered.image.convert("RGB"))
+
+    def mask_frame(local_time: float) -> np.ndarray:
+        rendered, _ = resolve_frame(float(local_time))
+        if rendered is None:
+            return np.zeros((1, 1), dtype=float)
+        return np.ones((rendered.image.height, rendered.image.width), dtype=float)
+
+    def position(local_time: float) -> tuple[int, int]:
+        rendered, _ = resolve_frame(float(local_time))
+        if rendered is None:
+            return 0, 0
+        return rendered.position
+
+    clip = VideoClip(
+        frame_function=frame,
+        duration=duration,
+        has_constant_size=False,
+    )
+    mask = VideoClip(
+        frame_function=mask_frame,
+        is_mask=True,
+        duration=duration,
+        has_constant_size=False,
+    )
+    clip = clip.with_mask(mask).with_position(position)
+    clip.caption_image_cache = image_cache
+    return clip
+
+
 def build_static_caption_clip(
     script: dict[str, Any],
     scene: dict[str, Any],
@@ -259,7 +356,6 @@ def build_static_caption_clip(
     width, height = resolution
     font_size = int(style.get("font_size", max(24, round(height * 0.035))))
     horizontal_margin = max(24, round(width * 0.06))
-    bottom_margin = max(24, round(height * 0.04))
     font_path = _caption_font(style)
     wrapped_text = _wrap_caption(
         caption_text_for_scene(scene),
@@ -282,7 +378,12 @@ def build_static_caption_clip(
         margin=(horizontal_margin // 2, max(12, font_size // 4)),
         duration=duration,
     )
-    return text_clip.with_position(("center", height - text_clip.h - bottom_margin))
+    caption_y = caption_position(
+        (text_clip.w, text_clip.h),
+        resolution,
+        style,
+    )[1]
+    return text_clip.with_position(("center", caption_y))
 
 
 def attach_scene_narration(

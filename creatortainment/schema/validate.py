@@ -12,6 +12,28 @@ from .tokenize import tokenize
 VALID_ANCHORS = {"top_left", "center", "bottom_center"}
 
 
+def _validate_caption_style(style: Any, path: str, errors: list[str]) -> None:
+    if style is None:
+        return
+    if not isinstance(style, dict):
+        errors.append(f"{path} must be an object or null.")
+        return
+    value = style.get("vertical_position_frac")
+    if value is not None and (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not 0.0 <= value <= 1.0
+    ):
+        errors.append(f"{path}.vertical_position_frac must be between 0 and 1.")
+    words_per_chunk = style.get("words_per_chunk")
+    if words_per_chunk is not None and (
+        isinstance(words_per_chunk, bool)
+        or not isinstance(words_per_chunk, int)
+        or words_per_chunk <= 0
+    ):
+        errors.append(f"{path}.words_per_chunk must be a positive integer.")
+
+
 @dataclass(frozen=True)
 class ValidationResult:
     script: dict[str, Any]
@@ -73,6 +95,8 @@ def validate_script(script: dict[str, Any], assets_root: Path) -> ValidationResu
     if not isinstance(scenes, list) or not scenes:
         errors.append("scenes must be a non-empty array.")
         scenes = []
+    if isinstance(project, dict):
+        _validate_caption_style(project.get("caption_style"), "project.caption_style", errors)
 
     asset_paths: dict[str, Path] = {}
     for key, relative_path in registry.items():
@@ -104,6 +128,11 @@ def validate_script(script: dict[str, Any], assets_root: Path) -> ValidationResu
             words: list[str] = []
         else:
             words = tokenize(narration)
+        _validate_caption_style(
+            scene.get("caption_style"),
+            f"{prefix}.caption_style",
+            errors,
+        )
 
         def check_asset(field_path: str, key: Any) -> None:
             if not isinstance(key, str) or key not in registry:

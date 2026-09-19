@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 from creatortainment.render.moviepy_scene import (
+    build_animated_caption_clip,
     build_full_video_clip,
     build_static_scene_clip,
     caption_text_for_scene,
@@ -84,3 +86,43 @@ def test_full_video_concatenates_all_manifest_scenes_in_order() -> None:
         assert clip.size == tuple(script["project"]["resolution"])
     finally:
         clip.close()
+
+
+def test_animated_caption_is_blank_then_advances_and_holds_final_word() -> None:
+    """Aligned scene captions are transparent before speech and cache active states."""
+    script = _script("example_script.json")
+    manifest = json.loads(
+        (ROOT / "projects/understanding_gpu_architecture/build_manifests/example_script.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    manifest = deepcopy(manifest)
+    scene_manifest = manifest["scenes"][0]
+    for timestamp in manifest["word_timestamps"][: scene_manifest["word_count"]]:
+        timestamp["start"] += 0.5
+        timestamp["end"] += 0.5
+    scene_manifest["end_time_sec"] += 0.5
+    scene_manifest["duration_sec"] += 0.5
+    scene = script["scenes"][0]
+    caption = build_animated_caption_clip(
+        script,
+        scene,
+        scene_manifest,
+        manifest,
+        tuple(script["project"]["resolution"]),
+        float(scene_manifest["duration_sec"]),
+    )
+    try:
+        assert caption.mask.get_frame(0.0).max() == 0.0
+        first_word_time = float(manifest["word_timestamps"][0]["start"])
+        first = caption.get_frame(first_word_time - scene_manifest["start_time_sec"])
+        assert first.shape[0] > 1
+        assert caption.caption_image_cache.render_count == 1
+        caption.get_frame(first_word_time - scene_manifest["start_time_sec"] + 0.01)
+        assert caption.caption_image_cache.hit_count >= 1
+        last_word = manifest["word_timestamps"][scene_manifest["word_offset"] + scene_manifest["word_count"] - 1]
+        held = caption.get_frame(float(last_word["end"]) - scene_manifest["start_time_sec"] + 0.5)
+        assert held.shape[0] > 1
+        assert caption.caption_image_cache.render_count >= 2
+    finally:
+        caption.close()

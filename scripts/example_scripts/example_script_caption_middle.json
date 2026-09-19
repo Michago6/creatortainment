@@ -1,0 +1,167 @@
+{
+  "_conventions": {
+    "word_indexing": "0-based. Tokenize narration_text by splitting on whitespace only (collapse repeated spaces first, strip leading/trailing). Do NOT split on punctuation \u2014 'GPU,' and \"state-of-the-art\" are each ONE token. Contractions like \"we're\" are one token. trigger_word_index is always LOCAL to the scene's own narration_text (resets to 0 per scene) \u2014 the build pipeline computes global offsets, the script author never does.",
+    "narration_generation": "narration_text for ALL scenes is concatenated in scene order and sent to ElevenLabs as ONE call, producing one continuous audio file for the whole video plus one global word-timestamp array. The pipeline slices that array back into per-scene ranges using each scene's word count. Editing any scene's narration_text invalidates the ENTIRE audio cache, not just that scene.",
+    "pause_before_sec": "Optional gap inserted before this scene's narration begins (SSML break if the ElevenLabs model supports it, otherwise literal silence spliced into the audio track at assembly time). Defaults to 0.3 if omitted. Set to 0 for a hard continuous read across a scene boundary.",
+    "captions_are_always_narration": "On-screen captions always render narration_text verbatim, word-by-word highlighted using the ElevenLabs alignment. There is no separate caption override field \u2014 what's spoken is what's captioned, always.",
+    "word_highlight_captions": "Captions display words_per_chunk words at a time (caption_style field, default 3), advancing as speech progresses through narration_text \u2014 short-form-video style, not full-sentence wrapping. Before the first word of a scene: blank, nothing shown. After the last word finishes: the final chunk holds on screen indefinitely with the last word still highlighted \u2014 no disappearing, no un-highlighting, no interaction with pause_before_sec. The active word is highlighted via highlight_color (a different text color) only. highlight_scale is optional and defaults to 1.0 (no size change) unless a script explicitly sets it higher.",
+    "caption_vertical_position": "caption_style.vertical_position_frac (float 0.0-1.0, optional) sets the caption block's BOTTOM edge as a fraction of canvas height \u2014 e.g. 0.5 puts the bottom edge at the vertical center of the frame. If omitted, the existing resolution-aware bottom-margin default is used (bottom_margin = max(24px, 4% of canvas height)), so existing scripts render identically without needing to set this. Settable at project.caption_style or overridden per-scene, same inheritance rule as every other caption_style field.",
+    "caption_style_inheritance": "scene.caption_style is null by default and inherits project.caption_style. If set, it is MERGED over the project default (only override the fields you're changing), not replaced wholesale.",
+    "asset_refs": "Every asset field (bg, element.asset, sfx.asset, bg_music.asset) must be a key in asset_registry. No raw file paths in scenes, no 'default' sentinel value.",
+    "transition_in_null": "null means hard cut into this scene. The first scene of the video should always be null.",
+    "easing_values": ["instant", "linear", "ease_in", "ease_out", "ease_in_out", "bounce"],
+    "duration_sec": "Always null in the authored script. Computed by the build pipeline from the sliced ElevenLabs alignment and written to build_manifest.json, never back into this file.",
+    "index_bounds": "trigger_word_index must be < the local word count of that scene's narration_text. Pipeline validation must reject scripts where it isn't, before any rendering starts.",
+    "elements_are_scene_scoped": "elements[] is fully redeclared per scene. Nothing persists automatically across a scene boundary \u2014 if a character should appear to 'continue' into the next scene, that scene must redeclare it with its own opening keyframe.",
+    "sizing_model": "Elements are sized as a FRACTION OF THE CANVAS, never as a multiplier of the source file's native pixel dimensions. Each keyframe sets exactly ONE of target_height_frac or target_width_frac (0.0-1.0, fraction of project.resolution's height or width respectively) \u2014 the pipeline reads the asset's actual pixel dimensions from disk at build time and computes the real scale factor as (frac * canvas_dimension_px) / native_dimension_px, preserving the source aspect ratio. Never set both fields unless you deliberately want a non-uniform stretch; the script itself never declares an asset's native pixel size.",
+    "anchor": "Each element declares an anchor point via 'anchor': 'top_left' | 'center' | 'bottom_center'. pos is the canvas-pixel location of THAT anchor point, not the image's top-left corner. Use bottom_center for anything that should stay planted on the ground as it resizes across keyframes (e.g. a standing character); use center for floating diagrams/icons. This keeps pos stable across keyframes even when target_height_frac/target_width_frac changes the element's rendered size.",
+    "bg_fit": "Background images are always resized via cover-fit (scaled + center-cropped to exactly fill project.resolution, like CSS background-size: cover). Backgrounds have no size field \u2014 the author never manually scales a bg.",
+    "bg_music_is_a_change_event": "bg_music represents a CHANGE, not per-scene state. null means 'no change \u2014 whatever was already playing keeps playing unchanged.' To stop music, emit an explicit bg_music with volume: 0.0 and a fade_in_sec duration (the field doubles as the transition time toward the target volume, whether that's louder or quieter, despite the name).",
+    "tts_model_and_project_identity": "project.tts_model selects the ElevenLabs model used for the ONE narration call covering the whole video (default eleven_flash_v2_5, the cheapest option). project.title is slugified into a STABLE on-disk project folder name (no date/time in it). Running a script whose title matches an existing project reuses that project: if the concatenated narration_text + tts_model hash matches what's cached, no new API call is made; if it differs, a new narration file is added to that project's narrations/ folder (old ones are never overwritten) after an explicit confirmation prompt. project.date is metadata only \u2014 it does not affect identity matching.",
+    "voice_id": "project.voice_id is the ElevenLabs voice ID used for the single full-video narration call. It must be provided in every script."
+  },
+  "project": {
+    "title": "Understanding GPU Architecture",
+    "date": "2026-09-15",
+    "tts_model": "eleven_flash_v2_5",
+    "voice_id": "fBD19tfE58bkETeiwUoC",
+    "aspect_ratio": "9:16",
+    "resolution": [1080, 1920],
+    "fps": 30,
+    "caption_style": {
+      "font": "Montserrat-Bold",
+      "font_size": 64,
+      "color": "#FFFFFF",
+      "stroke_color": "#000000",
+      "stroke_width": 3,
+      "position": "bottom_center",
+      "max_chars_per_line": 28,
+      "highlight_color": "#FFD700",
+      "highlight_scale": 1.15,
+      "words_per_chunk": 3,
+      "vertical_position_frac": 0.5
+    }
+  },
+  "asset_registry": {
+    "bg_studio_default": "assets/backgrounds/default_studio.jpg",
+    "bg_cyber": "assets/backgrounds/cyberpunk_room.jpg",
+    "mrmouse_relaxed": "assets/sprites/mrmouse_relaxed.png",
+    "mrmouse_pointing": "assets/sprites/mrmouse_pointing.png",
+    "mrmouse_laptop": "assets/sprites/mrmouse_laptop.png",
+    "mrmouse_excited": "assets/sprites/mrmouse_excited.png",
+    "img_gpu_diagram": "assets/images/gpu_core_diagram.jpg",
+    "img_core_grid": "assets/images/gpu_core_grid.jpg",
+    "sfx_pop": "assets/audio/sfx/pop.mp3",
+    "sfx_whoosh": "assets/audio/sfx/whoosh.mp3",
+    "music_main": "assets/audio/monkeys_spinning_monkeys.mp3"
+  },
+  "scenes": [
+    {
+      "id": "scene_1",
+      "bg": "bg_cyber",
+      "narration_text": "Welcome back! Today we are looking inside a GPU to see how parallel cores actually work.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "bg_music": {
+        "asset": "music_main",
+        "trigger_word_index": 0,
+        "volume": 0.3,
+        "fade_in_sec": 1.0
+      },
+      "sfx": [
+        { "asset": "sfx_pop", "trigger_word_index": 2, "volume": 0.8 },
+        { "asset": "sfx_pop", "trigger_word_index": 7, "volume": 0.8 }
+      ],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [540, 1750], "target_height_frac": 0.32, "opacity": 1.0, "easing": "instant" },
+            { "trigger_word_index": 6, "pos": [300, 1750], "target_height_frac": 0.32, "opacity": 1.0, "easing": "ease_in_out" }
+          ]
+        },
+        {
+          "id": "gpu_diagram",
+          "asset": "img_gpu_diagram",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            { "trigger_word_index": 6, "pos": [750, 800], "target_width_frac": 0.05, "opacity": 0.0, "easing": "instant" },
+            { "trigger_word_index": 7, "pos": [750, 800], "target_width_frac": 0.55, "opacity": 1.0, "easing": "bounce" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_2",
+      "bg": "bg_studio_default",
+      "narration_text": "Look at all these arithmetic logic units executing threads simultaneously.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.4,
+      "transition_in": { "type": "crossfade", "duration_sec": 0.5 },
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_laptop",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [540, 1750], "target_height_frac": 0.34, "opacity": 1.0, "easing": "instant" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_3",
+      "bg": "bg_cyber",
+      "narration_text": "That is thousands of tiny cores, all crunching numbers at the exact same time. Wild, right?",
+      "caption_style": {
+        "font_size": 76,
+        "highlight_color": "#00E5FF"
+      },
+      "duration_sec": null,
+      "pause_before_sec": 0.3,
+      "transition_in": { "type": "crossfade", "duration_sec": 0.4 },
+      "bg_music": {
+        "asset": "music_main",
+        "trigger_word_index": 0,
+        "volume": 0.45,
+        "fade_in_sec": 0.3
+      },
+      "sfx": [
+        { "asset": "sfx_whoosh", "trigger_word_index": 0, "volume": 0.6 }
+      ],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_excited",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [540, 1850], "target_height_frac": 0.26, "opacity": 0.0, "easing": "instant" },
+            { "trigger_word_index": 1, "pos": [540, 1750], "target_height_frac": 0.32, "opacity": 1.0, "easing": "bounce" }
+          ]
+        },
+        {
+          "id": "core_grid",
+          "asset": "img_core_grid",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            { "trigger_word_index": 0, "pos": [540, 700], "target_width_frac": 0.3, "opacity": 0.0, "easing": "instant" },
+            { "trigger_word_index": 2, "pos": [540, 700], "target_width_frac": 0.5, "opacity": 1.0, "easing": "ease_out" },
+            { "trigger_word_index": 12, "pos": [540, 700], "target_width_frac": 0.55, "opacity": 1.0, "easing": "ease_in_out" }
+          ]
+        }
+      ]
+    }
+  ]
+}

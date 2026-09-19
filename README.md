@@ -160,6 +160,6 @@ projects/understanding_gpu_architecture/
 
 Use the script-specific manifest under `build_manifests/` when available;
 rendering falls back to the legacy project-level manifest for older projects.
-The current MoviePy renderer uses static first-keyframe layouts, static
-captions, and narration audio. Animated timelines, word highlighting, and
-mixed music/SFX audio are still upcoming phases.
+The current MoviePy renderer uses animated element timelines, cached
+word-highlighted captions, and narration audio. Mixed music/SFX audio is
+still an upcoming phase.

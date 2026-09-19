@@ -12,7 +12,13 @@ from pathlib import Path
 
 from .audio.alignment import align_scenes
 from .audio.elevenlabs_client import ElevenLabsNarrationClient
-from .audio.manifest import DEFAULT_TTS_MODEL, narration_hash, read_manifest, write_manifest
+from .audio.manifest import (
+    DEFAULT_TTS_MODEL,
+    narration_hash,
+    narration_hash_for_text,
+    read_manifest,
+    write_manifest,
+)
 from .project_identity import (
     new_state,
     project_state_path,
@@ -187,6 +193,35 @@ def repair_cached_manifest_timing(
     return True
 
 
+def find_matching_narration(
+    project_dir: Path,
+    expected_hash: str,
+) -> tuple[Path, list[dict[str, Any]]] | None:
+    """Find any retained narration sidecar matching the requested hash."""
+    narrations_dir = project_dir / "narrations"
+    if not narrations_dir.is_dir():
+        return None
+    for sidecar_path in sorted(narrations_dir.glob("*.json")):
+        try:
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        text = sidecar.get("narration_text")
+        model = sidecar.get("tts_model", DEFAULT_TTS_MODEL)
+        timestamps = sidecar.get("word_timestamps")
+        if (
+            not isinstance(text, str)
+            or not isinstance(model, str)
+            or not isinstance(timestamps, list)
+            or narration_hash_for_text(text, model) != expected_hash
+        ):
+            continue
+        audio_path = sidecar_path.with_suffix(".mp3")
+        if audio_path.is_file():
+            return audio_path, timestamps
+    return None
+
+
 def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
     script = load_script(script_path)
     result = validate_script(script, ASSETS_ROOT)
@@ -206,16 +241,17 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
         )
     incoming_hash = narration_hash(script)
     existing = project_dir.exists()
-    api_key = read_api_key(ELEVENLABS_API_KEY_PATH)
+    model = script["project"].get("tts_model", DEFAULT_TTS_MODEL)
     voice_id = script["project"].get("voice_id")
     if not isinstance(voice_id, str) or not voice_id.strip():
         raise RuntimeError(
             "project.voice_id is required in the input script and must contain an ElevenLabs voice ID."
         )
+    matched_audio = find_matching_narration(project_dir, incoming_hash) if existing else None
     if existing and not force_audio:
         state = read_project_state(project_state_path(project_dir))
         print(f"A project named '{title}' already exists (last updated {state.get('updated_at', 'unknown')}).")
-        same = state.get("narration_hash") == incoming_hash
+        same = matched_audio is not None
         if same:
             print("Same audio description detected. New audio won't be created.")
         else:
@@ -226,25 +262,25 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
         if input(f"Update existing project '{title}' with this script? [y/N] ").strip().lower() not in {"y", "yes"}:
             print("Update cancelled; no files were changed.")
             return 0
-        if same:
-            legacy_manifest = project_dir / "build_manifest.json"
-            variant_path = variant_manifest_path(project_dir, script_path)
-            if legacy_manifest.is_file() and not variant_path.is_file():
-                variant_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(legacy_manifest, variant_path)
-            if variant_path.is_file():
-                manifest_path = variant_path
-            elif legacy_manifest.is_file():
-                manifest_path = legacy_manifest
-            else:
-                raise FileNotFoundError(
-                    f"Cached narration manifest not found in {project_dir}."
-                )
-            repaired = repair_cached_manifest_timing(script, manifest_path, project_dir)
+        if same and matched_audio is not None:
+            audio_path, timestamps = matched_audio
+            manifest = {
+                "narration_hash": incoming_hash,
+                "narration_audio_path": str(audio_path.relative_to(project_dir)),
+                "word_timestamps": timestamps,
+                "scenes": [
+                    scene.to_dict()
+                    for scene in align_scenes(script["scenes"], timestamps)
+                ],
+            }
+            manifest_path = variant_manifest_path(project_dir, script_path)
+            write_manifest(manifest_path, manifest)
+            write_manifest(project_dir / "build_manifest.json", manifest)
             state.update({"title": title, "date": script["project"].get("date"), "updated_at": datetime.now(timezone.utc).isoformat()})
+            state["narration_hash"] = incoming_hash
+            state["tts_model"] = model
             write_project_state(project_state_path(project_dir), state)
-            if repaired:
-                print("Cached manifest timing was repaired from the existing narration.")
+            shutil.copy2(script_path, project_dir / "script.json")
             print("Project metadata updated; existing narration remains active.")
             return 0
     elif not existing:
@@ -253,7 +289,7 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
 
     project_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(script_path, project_dir / "script.json")
-    model = script["project"].get("tts_model", DEFAULT_TTS_MODEL)
+    api_key = read_api_key(ELEVENLABS_API_KEY_PATH)
     result = ElevenLabsNarrationClient(
         api_key,
         voice_id=voice_id,
