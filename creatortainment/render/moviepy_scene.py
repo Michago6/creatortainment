@@ -23,8 +23,10 @@ from .captions import (
     resolve_active_caption,
     wrap_caption_lines,
 )
+from ..audio.mixing import build_final_audio_mix
 from .mock import AssetDimensionCache, _asset_path
 from .keyframes import resolve_element_state
+from .timeline import build_scene_final_offsets
 from ..timeline import timed_element
 
 
@@ -431,6 +433,7 @@ def build_full_video_clip(
         raise ValueError("Cannot build a video without scenes.")
 
     scene_clips = []
+    scene_offsets = build_scene_final_offsets(script, manifest)
     for index, (scene, scene_manifest) in enumerate(zip(scenes, scene_manifests)):
         scene_clip = build_static_scene_clip(
             script,
@@ -445,9 +448,7 @@ def build_full_video_clip(
             manifest,
             project_dir,
         )
-        pause = float(scene.get("pause_before_sec", 0.0)) if index > 0 else 0.0
-        if pause < 0:
-            raise ValueError(f"Scene {scene.get('id', index)!r} has an invalid pause.")
+        pause = scene_offsets[index].pause_before_sec
         if pause:
             background_path = _asset_path(script["asset_registry"], scene["bg"], assets_root)
             filler = _cover_background(
@@ -462,4 +463,16 @@ def build_full_video_clip(
             )
             scene_clips.append(filler.with_audio(silent_audio))
         scene_clips.append(narrated_clip)
-    return concatenate_videoclips(scene_clips, method="chain")
+    final_clip = concatenate_videoclips(scene_clips, method="chain")
+    if final_clip.audio is None:
+        raise RuntimeError("Final assembled video has no narration audio to mix.")
+    final_clip = final_clip.with_audio(
+        build_final_audio_mix(
+            final_clip.audio,
+            script,
+            manifest,
+            assets_root,
+            project_dir,
+        )
+    )
+    return final_clip
