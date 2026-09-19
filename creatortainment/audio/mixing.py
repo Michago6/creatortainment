@@ -123,7 +123,7 @@ def music_gain_at_time(
     duck_gain: float,
     narration_intervals: list[tuple[float, float]],
 ) -> float | np.ndarray:
-    """Return the segment's baseline/faded/ducked linear gain at an absolute time."""
+    """Return the continuously ducked gain for an active music segment."""
     times = np.asarray(time_sec, dtype=float)
     elapsed = times - segment.start_sec
     if segment.fade_in_sec > 0.0:
@@ -134,11 +134,7 @@ def music_gain_at_time(
     else:
         baseline = np.full_like(times, segment.volume)
     in_segment = (times >= segment.start_sec) & (times < segment.end_sec)
-    ducked = np.array(
-        [_is_narration_time(float(time), narration_intervals) for time in times.flat],
-        dtype=bool,
-    ).reshape(times.shape)
-    gains = np.where(in_segment, baseline * np.where(ducked, duck_gain, 1.0), 0.0)
+    gains = np.where(in_segment, baseline * duck_gain, 0.0)
     return float(gains) if gains.ndim == 0 else gains
 
 
@@ -288,14 +284,7 @@ def build_background_music_track(
                 ) * progress
             else:
                 baseline = np.full_like(absolute_times, segment.volume)
-            ducked = np.array(
-                [
-                    _is_narration_time(float(time), intervals)
-                    for time in absolute_times.flat
-                ],
-                dtype=bool,
-            ).reshape(absolute_times.shape)
-            gains = baseline * np.where(ducked, duck_gain, 1.0)
+            gains = baseline * duck_gain
             frames = get_frame(local_time)
             if gains.ndim == 0:
                 return frames * float(gains)

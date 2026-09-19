@@ -36,21 +36,18 @@ def _manifest() -> dict:
     )
 
 
-def test_music_gain_is_ducked_during_narration_and_baseline_during_pause() -> None:
-    """The pause before scene two is baseline while scene one narration is ducked."""
+def test_music_gain_stays_ducked_during_narration_and_pause() -> None:
+    """The pause before scene two keeps the same ducked gain as narration."""
     script = _script()
     manifest = _manifest()
     offsets = build_scene_final_offsets(script, manifest)
     segment = build_music_segments(script, manifest, offsets)[0]
     intervals = [(item.narration_start_sec, item.narration_end_sec) for item in offsets]
-    ducked = music_gain_at_time(segment, offsets[0].narration_start_sec + 0.5, 0.3, intervals)
+    ducked = music_gain_at_time(segment, offsets[0].narration_start_sec + 1.5, 0.3, intervals)
     pause_time = offsets[1].final_start_sec + 0.1
     baseline = music_gain_at_time(segment, pause_time, 0.3, intervals)
-    expected_faded_baseline = segment.fade_from_volume + (
-        segment.volume - segment.fade_from_volume
-    ) * 0.5 / segment.fade_in_sec
-    assert ducked == pytest.approx(expected_faded_baseline * 0.3)
-    assert baseline == pytest.approx(segment.volume)
+    assert ducked == pytest.approx(segment.volume * 0.3)
+    assert baseline == pytest.approx(segment.volume * 0.3)
 
 
 def test_music_gain_accepts_timestamp_arrays() -> None:
