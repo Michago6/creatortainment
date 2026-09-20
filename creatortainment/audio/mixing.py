@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 from moviepy import AudioClip, AudioFileClip, CompositeAudioClip
@@ -40,6 +40,26 @@ class MusicSegment:
     fade_from_gain: float
     fade_in_sec: float
     duck_to_narration_pct: float
+
+
+@dataclass(frozen=True)
+class MusicGainTransition:
+    """A gain transition on an uninterrupted source-asset run."""
+
+    time_sec: float
+    from_duck_pct: float | None
+    to_duck_pct: float | None
+    duration_sec: float
+
+
+@dataclass
+class MusicLayer:
+    """One continuously looped source with gain transitions."""
+
+    start_sec: float
+    end_sec: float
+    asset: str
+    transitions: list[MusicGainTransition]
 
 
 def _final_video_duration(scene_offsets: list[SceneOffset]) -> float:
@@ -93,20 +113,21 @@ def build_music_segments(
     active_asset: str | None = None
     for index, event in enumerate(events):
         end = events[index + 1].time_sec if index + 1 < len(events) else end_sec
-        if end <= event.time_sec:
-            continue
         if event.stop:
             if active_asset is None:
                 continue
             asset = active_asset
             target_gain = 0.0
             fade_from_gain = 1.0
+            active_asset = None
         else:
             asset = event.asset
             if asset is None:
                 continue
             target_gain = 1.0
             fade_from_gain = 1.0 if active_asset == asset else 0.0
+            if active_asset == asset:
+                continue
             active_asset = asset
         scene_index = next(
             (
@@ -128,6 +149,98 @@ def build_music_segments(
             )
         )
     return segments
+
+
+def _scene_index_at_time(
+    scene_offsets: list[SceneOffset],
+    time_sec: float,
+) -> int:
+    return next(
+        (
+            offset.scene_index
+            for offset in reversed(scene_offsets)
+            if offset.final_start_sec <= time_sec
+        ),
+        0,
+    )
+
+
+def _build_music_layers(
+    script: dict[str, Any],
+    manifest: dict[str, Any],
+    scene_offsets: list[SceneOffset],
+) -> list[MusicLayer]:
+    events = build_music_events(script, manifest, scene_offsets)
+    duration = _final_video_duration(scene_offsets)
+    layers: list[MusicLayer] = []
+    active: MusicLayer | None = None
+    for event in events:
+        duck_pct = _effective_duck_pct(
+            script,
+            _scene_index_at_time(scene_offsets, event.time_sec),
+        )
+        if event.stop:
+            if active is None:
+                continue
+            active.transitions.append(
+                MusicGainTransition(
+                    time_sec=event.time_sec,
+                    from_duck_pct=active.transitions[-1].to_duck_pct
+                    or _effective_duck_pct(
+                        script,
+                        _scene_index_at_time(scene_offsets, event.time_sec),
+                    ),
+                    to_duck_pct=None,
+                    duration_sec=event.fade_in_sec,
+                )
+            )
+            active.end_sec = min(duration, event.time_sec + event.fade_in_sec)
+            active = None
+            continue
+        if event.asset is None:
+            continue
+        if active is not None and active.asset == event.asset:
+            previous = active.transitions[-1].to_duck_pct
+            if previous is None:
+                previous = duck_pct
+            active.transitions.append(
+                MusicGainTransition(
+                    time_sec=event.time_sec,
+                    from_duck_pct=previous,
+                    to_duck_pct=duck_pct,
+                    duration_sec=event.fade_in_sec,
+                )
+            )
+            continue
+        if active is not None:
+            active.transitions.append(
+                MusicGainTransition(
+                    time_sec=event.time_sec,
+                    from_duck_pct=active.transitions[-1].to_duck_pct
+                    or _effective_duck_pct(
+                        script,
+                        _scene_index_at_time(scene_offsets, event.time_sec),
+                    ),
+                    to_duck_pct=None,
+                    duration_sec=event.fade_in_sec,
+                )
+            )
+            active.end_sec = min(duration, event.time_sec + event.fade_in_sec)
+        active = MusicLayer(
+            start_sec=event.time_sec,
+            end_sec=duration,
+            asset=event.asset,
+            transitions=[
+                MusicGainTransition(
+                    time_sec=event.time_sec,
+                    from_duck_pct=None,
+                    to_duck_pct=duck_pct,
+                    duration_sec=event.fade_in_sec,
+                )
+            ],
+        )
+        layers.append(active)
+    return layers
 
 
 def _effective_duck_pct(script: dict[str, Any], scene_index: int) -> float:
@@ -291,63 +404,88 @@ def build_background_music_track(
     """Build one continuous, looped and ducked background music track."""
     scene_offsets = build_scene_final_offsets(script, manifest)
     duration = _final_video_duration(scene_offsets)
-    segments = build_music_segments(script, manifest, scene_offsets)
-    if not segments:
+    layers = _build_music_layers(script, manifest, scene_offsets)
+    if not layers:
         return _silence(duration)
     cache = loudness_cache or LoudnessCache()
     clips = []
     registry = script["asset_registry"]
-    for segment in segments:
-        path = _asset_path(registry, segment.asset, assets_root)
+    for layer in layers:
+        path = _asset_path(registry, layer.asset, assets_root)
         music_loudness = cache.measure(path)
-        duck_gain_cache: dict[float, float] = {}
+        duck_gains = {
+            transition.to_duck_pct: compute_duck_gain(
+                narration_loudness,
+                music_loudness,
+                transition.to_duck_pct,
+            )
+            for transition in layer.transitions
+            if transition.to_duck_pct is not None
+        }
+        resolved_transitions: list[tuple[float, float, float, float]] = []
 
-        def duck_gain_for_times(
-            absolute_times: np.ndarray,
-            *,
-            segment=segment,
-            music_loudness=music_loudness,
-        ) -> float | np.ndarray:
-            times = np.asarray(absolute_times, dtype=float)
-            gains = np.empty_like(times)
-            for offset in scene_offsets:
-                scene_start = offset.final_start_sec
-                scene_end = offset.narration_end_sec
-                mask = (times >= scene_start) & (times < scene_end)
-                if not np.any(mask):
-                    continue
-                scene = script["scenes"][offset.scene_index]
-                override = scene.get("duck_to_narration_pct")
-                duck_pct = (
-                    segment.duck_to_narration_pct
-                    if override is None
-                    else float(override)
+        def gain_at_absolute_time(time_sec: float) -> float:
+            value = 0.0
+            for start, from_gain, to_gain, fade_duration in resolved_transitions:
+                if time_sec < start:
+                    break
+                if fade_duration <= 0.0 or time_sec >= start + fade_duration:
+                    value = to_gain
+                else:
+                    progress = (time_sec - start) / fade_duration
+                    value = from_gain + (to_gain - from_gain) * progress
+            return value
+
+        for transition in layer.transitions:
+            target = (
+                0.0
+                if transition.to_duck_pct is None
+                else duck_gains[transition.to_duck_pct]
+            )
+            from_gain = (
+                0.0
+                if transition.from_duck_pct is None
+                else duck_gains[transition.from_duck_pct]
+            )
+            resolved_transitions.append(
+                (
+                    transition.time_sec,
+                    from_gain,
+                    target,
+                    transition.duration_sec,
                 )
-                if duck_pct not in duck_gain_cache:
-                    duck_gain_cache[duck_pct] = compute_duck_gain(
-                        narration_loudness,
-                        music_loudness,
-                        duck_pct,
-                    )
-                gains[mask] = duck_gain_cache[duck_pct]
-            return float(gains) if gains.ndim == 0 else gains
-
-        segment_duration = segment.end_sec - segment.start_sec
+            )
+        layer_duration = layer.end_sec - layer.start_sec
         source = AudioFileClip(str(path))
-        looped = source.with_effects([AudioLoop(duration=segment_duration)])
+        looped = source.with_effects([AudioLoop(duration=layer_duration)])
 
-        def gain_frame(get_frame, local_time, segment=segment):
+        def gain_frame(
+            get_frame,
+            local_time,
+            layer=layer,
+            resolved_transitions=resolved_transitions,
+        ):
             local_times = np.asarray(local_time, dtype=float)
-            absolute_times = segment.start_sec + local_times
-            elapsed = absolute_times - segment.start_sec
-            if segment.fade_in_sec > 0.0:
-                progress = np.minimum(1.0, elapsed / segment.fade_in_sec)
-                baseline = segment.fade_from_gain + (
-                    segment.target_gain - segment.fade_from_gain
-                ) * progress
-            else:
-                baseline = np.full_like(absolute_times, segment.target_gain)
-            gains = baseline * duck_gain_for_times(absolute_times)
+            absolute_times = layer.start_sec + local_times
+            gains = np.zeros_like(absolute_times)
+            for start, from_gain, target, fade_duration in resolved_transitions:
+                after = absolute_times >= start
+                if fade_duration <= 0.0:
+                    gains = np.where(after, target, gains)
+                    continue
+                progress = np.clip(
+                    (absolute_times - start) / fade_duration,
+                    0.0,
+                    1.0,
+                )
+                transition_gain = from_gain + (target - from_gain) * progress
+                gains = np.where(after, transition_gain, gains)
+            gains = np.where(
+                (absolute_times >= layer.start_sec)
+                & (absolute_times < layer.end_sec),
+                gains,
+                0.0,
+            )
             frames = get_frame(local_time)
             if gains.ndim == 0:
                 return frames * float(gains)
@@ -355,6 +493,6 @@ def build_background_music_track(
 
         clips.append(
             looped.transform(gain_frame, keep_duration=True)
-            .with_start(segment.start_sec)
+            .with_start(layer.start_sec)
         )
     return CompositeAudioClip(clips).with_duration(duration)

@@ -29,6 +29,38 @@ def _manifest() -> dict:
     )
 
 
+def test_stop_cue_fixture_builds_final_video_audio() -> None:
+    """A stop cue fades to silence without entering duck-ratio validation."""
+    script = json.loads(
+        (
+            ROOT / "scripts/example_scripts/example_script_music_pause.json"
+        ).read_text(encoding="utf-8")
+    )
+    manifest = _manifest()
+    duration = sum(float(item["duration_sec"]) for item in manifest["scenes"])
+    duration += sum(
+        float(scene.get("pause_before_sec", 0.0))
+        for scene in script["scenes"][1:]
+    )
+    narration = AudioClip(
+        frame_function=lambda t: [0.0, 0.0],
+        duration=duration,
+        fps=44100,
+    )
+    mixed = build_final_audio_mix(
+        narration,
+        script,
+        manifest,
+        ASSETS,
+        PROJECT,
+    )
+    try:
+        assert mixed.duration == pytest.approx(duration)
+    finally:
+        mixed.close()
+        narration.close()
+
+
 def test_final_audio_mix_has_video_duration_and_three_layers() -> None:
     """The final mix combines narration, music, and SFX for the complete video."""
     script = _script()

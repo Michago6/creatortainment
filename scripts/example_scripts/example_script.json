@@ -132,12 +132,8 @@
       "duration_sec": null,
       "pause_before_sec": 0.3,
       "transition_in": { "type": "crossfade", "duration_sec": 0.4 },
-      "duck_to_narration_pct": null,
-      "bg_music": {
-        "asset": "music_main",
-        "trigger_word_index": 0,
-        "fade_in_sec": 0.3
-      },
+      "duck_to_narration_pct": 0.55,
+      "bg_music": null,
       "sfx": [
         { "asset": "sfx_whoosh", "trigger_word_index": 0, "volume": 0.6 }
       ],

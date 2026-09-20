@@ -14,6 +14,7 @@ from creatortainment.audio.loudness import (
     measure_loudness,
 )
 from creatortainment.audio.mixing import (
+    _build_music_layers,
     build_background_music_track,
     build_music_segments,
     music_gain_at_time,
@@ -73,15 +74,13 @@ def test_music_gain_accepts_timestamp_arrays() -> None:
 
 
 def test_music_change_event_starts_new_segment() -> None:
-    """Scene three's music event starts a new normalized-gain segment."""
+    """A same-asset re-trigger does not create a new source segment."""
     script = _script()
     manifest = _manifest()
     segments = build_music_segments(script, manifest, build_scene_final_offsets(script, manifest))
-    assert len(segments) == 2
+    assert len(segments) == 1
     assert segments[0].asset == "music_main"
-    assert segments[1].start_sec > segments[0].start_sec
-    assert segments[-1].fade_in_sec == pytest.approx(0.3)
-    assert segments[-1].target_gain == pytest.approx(1.0)
+    assert segments[0].start_sec == pytest.approx(0.0)
 
 
 def test_scene_duck_override_changes_music_gain() -> None:
@@ -91,11 +90,43 @@ def test_scene_duck_override_changes_music_gain() -> None:
     offsets = build_scene_final_offsets(script, manifest)
     segments = build_music_segments(script, manifest, offsets)
     assert segments[0].duck_to_narration_pct == pytest.approx(0.4)
-    assert len(segments) == 2
+    assert len(segments) == 1
 
     first_scene_gain = music_gain_at_time(segments[0], segments[0].start_sec + 2.0, 0.4, [])
     second_scene_gain = music_gain_at_time(segments[0], offsets[1].final_start_sec + 0.1, 0.7, [])
     assert first_scene_gain != pytest.approx(second_scene_gain)
+
+
+def test_same_asset_update_preserves_one_phase_continuous_layer() -> None:
+    script = _script()
+    script["scenes"][2]["bg_music"] = {
+        "asset": "music_main",
+        "trigger_word_index": 0,
+        "fade_in_sec": 0.3,
+    }
+    manifest = _manifest()
+    layers = _build_music_layers(script, manifest, build_scene_final_offsets(script, manifest))
+    assert len(layers) == 1
+    assert len(layers[0].transitions) == 2
+    assert layers[0].transitions[1].time_sec > layers[0].start_sec
+
+
+def test_different_asset_update_crossfades_layers() -> None:
+    script = _script()
+    script["scenes"][2]["bg_music"] = {
+        "asset": "sfx_pop",
+        "trigger_word_index": 0,
+        "fade_in_sec": 0.3,
+    }
+    manifest = _manifest()
+    layers = _build_music_layers(script, manifest, build_scene_final_offsets(script, manifest))
+    assert len(layers) == 2
+    outgoing, incoming = layers
+    assert outgoing.asset == "music_main"
+    assert incoming.asset == "sfx_pop"
+    assert incoming.start_sec == pytest.approx(outgoing.transitions[-1].time_sec)
+    assert outgoing.transitions[-1].to_duck_pct is None
+    assert incoming.transitions[0].from_duck_pct is None
 
 
 def test_music_phase_continues_across_null_scene_boundary() -> None:
@@ -145,6 +176,11 @@ def test_stop_music_event_fades_to_silence() -> None:
     }
     manifest = _manifest()
     offsets = build_scene_final_offsets(script, manifest)
+    layers = _build_music_layers(script, manifest, offsets)
+    stop_layer = layers[0]
+    stop_transition = stop_layer.transitions[-1]
+    assert stop_transition.to_duck_pct is None
+    assert stop_transition.duration_sec == pytest.approx(0.5)
     segments = build_music_segments(script, manifest, offsets)
     stop_segment = next(segment for segment in segments if segment.target_gain == 0.0)
     start_gain = music_gain_at_time(
@@ -161,6 +197,26 @@ def test_stop_music_event_fades_to_silence() -> None:
     )
     assert start_gain == pytest.approx(1.0)
     assert end_gain == pytest.approx(0.0)
+
+
+def test_music_restarts_only_after_stop() -> None:
+    script = _script()
+    script["scenes"][1]["bg_music"] = {
+        "stop": True,
+        "trigger_word_index": 0,
+        "fade_in_sec": 0.5,
+    }
+    script["scenes"][2]["bg_music"] = {
+        "asset": "music_main",
+        "trigger_word_index": 0,
+        "fade_in_sec": 0.25,
+    }
+    manifest = _manifest()
+    layers = _build_music_layers(script, manifest, build_scene_final_offsets(script, manifest))
+    assert len(layers) == 2
+    assert layers[0].asset == layers[1].asset == "music_main"
+    assert layers[1].start_sec > layers[0].start_sec
+    assert layers[1].transitions[0].from_duck_pct is None
 
 
 def test_real_music_asset_is_looped_to_full_required_stretch() -> None:
