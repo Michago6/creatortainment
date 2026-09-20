@@ -82,6 +82,10 @@ def test_full_video_concatenates_all_manifest_scenes_in_order() -> None:
             float(scene.get("pause_before_sec", 0.0))
             for scene in script["scenes"][1:]
         )
+        expected -= sum(
+            float(scene.get("transition_in", {}).get("duration_sec", 0.0))
+            for scene in script["scenes"][1:]
+        )
         assert abs(clip.duration - expected) <= 0.01
         assert clip.size == tuple(script["project"]["resolution"])
     finally:

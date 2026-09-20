@@ -16,13 +16,15 @@ class SceneOffset:
     final_start_sec: float
     narration_start_sec: float
     narration_end_sec: float
+    transition_duration_sec: float = 0.0
+    unit_duration_sec: float = 0.0
 
 
 def build_scene_final_offsets(
     script: dict[str, Any],
     manifest: dict[str, Any],
 ) -> list[SceneOffset]:
-    """Compute final-video placement including pauses before each scene."""
+    """Compute final-video placement including pauses and transition overlaps."""
     scenes = script.get("scenes", [])
     scene_manifests = manifest.get("scenes", [])
     if len(scenes) != len(scene_manifests):
@@ -36,17 +38,35 @@ def build_scene_final_offsets(
         narration_duration = float(scene_manifest["duration_sec"])
         if narration_duration <= 0.0:
             raise ValueError(f"Scene {scene.get('id', index)!r} has invalid duration.")
-        narration_start = cursor + pause
+        transition = 0.0
+        if index > 0:
+            transition_value = scene.get("transition_in")
+            if transition_value is not None:
+                transition = float(transition_value["duration_sec"])
+                if transition <= 0.0:
+                    raise ValueError(
+                        f"Scene {scene.get('id', index)!r} has an invalid transition duration."
+                    )
+                if transition > cursor:
+                    raise ValueError(
+                        f"Scene {scene.get('id', index)!r} transition exceeds the "
+                        "available preceding timeline."
+                    )
+        unit_duration = pause + narration_duration
+        scene_start = cursor - transition
+        narration_start = scene_start + pause
         offsets.append(
             SceneOffset(
                 scene_index=index,
                 pause_before_sec=pause,
-                final_start_sec=cursor,
+                final_start_sec=scene_start,
                 narration_start_sec=narration_start,
                 narration_end_sec=narration_start + narration_duration,
+                transition_duration_sec=transition,
+                unit_duration_sec=unit_duration,
             )
         )
-        cursor = narration_start + narration_duration
+        cursor = scene_start + unit_duration
     return offsets
 
 

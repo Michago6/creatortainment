@@ -65,7 +65,10 @@ class MusicLayer:
 def _final_video_duration(scene_offsets: list[SceneOffset]) -> float:
     if not scene_offsets:
         return 0.0
-    return scene_offsets[-1].narration_end_sec
+    return (
+        scene_offsets[-1].final_start_sec
+        + scene_offsets[-1].unit_duration_sec
+    )
 
 
 def build_music_events(

@@ -1,0 +1,1172 @@
+{
+  "_conventions": {
+    "word_indexing": "0-based. Tokenize narration_text by splitting on whitespace only (collapse repeated spaces first, strip leading/trailing). Do NOT split on punctuation — 'GPU,' and \"state-of-the-art\" are each ONE token. Contractions like \"we're\" are one token. trigger_word_index is always LOCAL to the scene's own narration_text (resets to 0 per scene) — the build pipeline computes global offsets, the script author never does.",
+    "narration_generation": "narration_text for ALL scenes is concatenated in scene order and sent to ElevenLabs as ONE call, producing one continuous audio file for the whole video plus one global word-timestamp array. The pipeline slices that array back into per-scene ranges using each scene's word count. Editing any scene's narration_text invalidates the ENTIRE audio cache, not just that scene.",
+    "pause_before_sec": "Optional gap inserted before this scene's narration begins (SSML break if the ElevenLabs model supports it, otherwise literal silence spliced into the audio track at assembly time). Defaults to 0.3 if omitted. Set to 0 for a hard continuous read across a scene boundary.",
+    "captions_are_always_narration": "On-screen captions always render narration_text verbatim, word-by-word highlighted using the ElevenLabs alignment. There is no separate caption override field — what's spoken is what's captioned, always.",
+    "word_highlight_captions": "Captions display words_per_chunk words at a time (caption_style field, default 3), advancing as speech progresses through narration_text — short-form-video style, not full-sentence wrapping. Before the first word of a scene: blank, nothing shown. After the last word finishes: the final chunk holds on screen indefinitely with the last word still highlighted — no disappearing, no un-highlighting, no interaction with pause_before_sec. The active word is highlighted via highlight_color (a different text color) only. highlight_scale is optional and defaults to 1.0 (no size change) unless a script explicitly sets it higher.",
+    "caption_vertical_position": "caption_style.vertical_position_frac (float 0.0-1.0, optional) sets the caption block's BOTTOM edge as a fraction of canvas height — e.g. 0.5 puts the bottom edge at the vertical center of the frame. If omitted, the existing resolution-aware bottom-margin default is used (bottom_margin = max(24px, 4% of canvas height)). Settable at project.caption_style or overridden per-scene.",
+    "caption_style_inheritance": "scene.caption_style is null by default and inherits project.caption_style. If set, it is MERGED over the project default (only override the fields you're changing), not replaced wholesale.",
+    "asset_refs": "Every asset field (bg, element.asset, sfx.asset, bg_music.asset) must be a key in asset_registry. No raw file paths in scenes, no 'default' sentinel value.",
+    "transition_in_null": "null means hard cut into this scene. The first scene of the video should always be null.",
+    "transitions": "transition_in supports four shapes beyond null (hard cut): { \"type\": \"crossfade\", \"duration_sec\" } — standard dissolve. { \"type\": \"zoom_out\", \"duration_sec\", \"zoom_scale\" (optional, default 1.3) } — incoming scene starts at zoom_scale and scales down to 1.0 over duration_sec while the outgoing scene fades out underneath. { \"type\": \"push\", \"direction\": \"left\"|\"right\", \"style\": \"hard\"|\"soft\", \"duration_sec\", \"feather_frac\" (optional, soft only, default 0.03) } — outgoing scene slides off-screen in direction, incoming slides in from the opposite edge; hard has a sharp leading edge, soft feathers/blurs it. EVERY transition type is an OVERLAP, not an addition — it subtracts duration_sec from total video length, the opposite of pause_before_sec.",
+    "easing_values": [
+      "instant",
+      "linear",
+      "ease_in",
+      "ease_out",
+      "ease_in_out",
+      "bounce"
+    ],
+    "duration_sec": "Always null in the authored script. Computed by the build pipeline from the sliced ElevenLabs alignment and written to build_manifest.json, never back into this file.",
+    "index_bounds": "trigger_word_index must be < the local word count of that scene's narration_text. Pipeline validation must reject scripts where it isn't, before any rendering starts.",
+    "elements_are_scene_scoped": "elements[] is fully redeclared per scene. Nothing persists automatically across a scene boundary — if a character should appear to 'continue' into the next scene, that scene must redeclare it with its own opening keyframe.",
+    "sizing_model": "Elements are sized as a FRACTION OF THE CANVAS, never as a multiplier of the source file's native pixel dimensions. Each keyframe sets exactly ONE of target_height_frac or target_width_frac (0.0-1.0, fraction of project.resolution's height or width respectively) — the pipeline reads the asset's actual pixel dimensions from disk at build time and computes the real scale factor, preserving the source aspect ratio. Never set both fields unless deliberately stretching; the script itself never declares an asset's native pixel size.",
+    "anchor": "Each element declares an anchor point via 'anchor': 'top_left' | 'center' | 'bottom_center'. pos is the canvas-pixel location of THAT anchor point, not the image's top-left corner. Use bottom_center for anything that should stay planted on the ground as it resizes across keyframes; use center for floating diagrams/icons.",
+    "bg_fit": "Background images are always resized via cover-fit (scaled + center-cropped to exactly fill project.resolution, like CSS background-size: cover). Backgrounds have no size field.",
+    "bg_music_is_a_change_event": "bg_music represents a CHANGE, not per-scene state: null means 'no change — whatever was already playing keeps playing unchanged.' A bg_music object only controls WHAT plays and WHEN it fades in — asset, trigger_word_index, fade_in_sec. It has no volume field; loudness is controlled entirely by duck_to_narration_pct. To stop music instead of switching assets, use {\"stop\": true, \"trigger_word_index\": ..., \"fade_in_sec\": ...} — fades the currently playing music out to silence over fade_in_sec rather than starting a new asset.",
+    "tts_model_and_project_identity": "project.tts_model selects the ElevenLabs model used for the ONE narration call covering the whole video (default eleven_flash_v2_5, the cheapest option). project.title is slugified into a STABLE on-disk project folder name (no date/time in it). Running a script whose title matches an existing project reuses that project: if the concatenated narration_text + tts_model hash matches what's cached, no new API call is made; if it differs, a new narration file is added to that project's narrations/ folder (old ones are never overwritten) after an explicit confirmation prompt. project.date is metadata only.",
+    "voice_id": "project.voice_id is the ElevenLabs voice ID used for the single full-video narration call. It must be provided in every script.",
+    "duck_to_narration_pct": "This is the ONLY control over background music loudness — bg_music has no volume field. It's a LOUDNESS-relative ratio: narration's integrated loudness and each music asset's integrated loudness are measured once, and the music is gained so its playback loudness sits at this fraction of the narration's loudness (0.4 = roughly -8 dB relative to narration). Once a bg_music cue starts, this gain applies CONTINUOUSLY through narration AND through pauses between scenes, until fade_in_sec ramps toward a new cue or a later bg_music change event. There is no separate 'baseline' level for pauses. Settable at project.duck_to_narration_pct (video-wide default) and overridable per-scene via scene.duck_to_narration_pct (null by default = inherit the project value)."
+  },
+  "project": {
+    "title": "pac-man-ghosts-were-never-smart",
+    "date": "2026-09-20",
+    "tts_model": "eleven_v3",
+    "voice_id": "fBD19tfE58bkETeiwUoC",
+    "duck_to_narration_pct": 0.4,
+    "aspect_ratio": "9:16",
+    "resolution": [
+      1080,
+      1920
+    ],
+    "fps": 30,
+    "caption_style": {
+      "font": "Montserrat-Bold",
+      "font_size": 64,
+      "color": "#FFFFFF",
+      "stroke_color": "#000000",
+      "stroke_width": 3,
+      "position": "bottom_center",
+      "max_chars_per_line": 28,
+      "highlight_color": "#FFD700",
+      "highlight_scale": 1.15,
+      "words_per_chunk": 3,
+      "vertical_position_frac": 0.6
+    }
+  },
+  "asset_registry": {
+    "bg_studio_default": "assets/backgrounds/default_studio.jpg",
+    "bg_cyber": "assets/backgrounds/cyberpunk_room.jpg",
+    "bg_white": "assets/backgrounds/plain_white.jpg",
+    "bg_arcade_retro": "assets/backgrounds/retro_arcade_1980s.jpg",
+    "bg_arcade_closeup": "assets/backgrounds/retro_arcade_closeup.jpg",
+    "mrmouse_relaxed": "assets/sprites/mrmouse_relaxed.png",
+    "mrmouse_pointing": "assets/sprites/mrmouse_pointing.png",
+    "mrmouse_laptop": "assets/sprites/mrmouse_laptop.png",
+    "mrmouse_excited": "assets/sprites/mrmouse_excited.png",
+    "img_gpu_diagram": "assets/images/gpu_core_diagram.jpg",
+    "img_core_grid": "assets/images/gpu_core_grid.jpg",
+    "img_pacman_gameplay": "assets/images/pacman_classic_gameplay.jpg",
+    "img_pacman_puckman": "assets/images/pacman_puck_man_vs_pac_man.jpg",
+    "img_chase_scatter_diagram": "assets/images/pacman_chase_scatter_diagram.png",
+    "img_state_machine": "assets/images/pacman_state_machine.png",
+    "img_blinky_target": "assets/images/pacman_blinky_target.png",
+    "img_pinky_target": "assets/images/pacman_pinky_target.png",
+    "img_inky_vector": "assets/images/pacman_inky_vector.png",
+    "img_clyde_behavior": "assets/images/pacman_clyde_behavior.png",
+    "img_killscreen": "assets/images/pacman_level_256_killscreen.jpg",
+    "img_level_counter_byte": "assets/images/pacman_level_counter_byte.png",
+    "img_byte_overflow": "assets/images/pacman_byte_overflow.png",
+    "img_corrupted_fruit": "assets/images/pacman_corrupted_fruit.png",
+    "img_corrupted_maze": "assets/images/pacman_corrupted_maze.jpg",
+    "img_arcade_crowd": "assets/images/pacman_arcade_crowd.jpg",
+    "img_killscreen_full": "assets/images/pacman_level_256_full.jpg",
+    "sfx_pop": "assets/audio/sfx/pop.mp3",
+    "sfx_whoosh": "assets/audio/sfx/whoosh.mp3",
+    "sfx_arcade_beep": "assets/audio/sfx/arcade_beep.mp3",
+    "sfx_glitch": "assets/audio/sfx/digital_glitch.mp3",
+    "sfx_error": "assets/audio/sfx/retro_error.mp3",
+    "sfx_level_up": "assets/audio/sfx/arcade_level_transition.mp3",
+    "sfx_reveal": "assets/audio/sfx/dramatic_reveal.mp3",
+    "music_main": "assets/audio/monkeys_spinning_monkeys.mp3",
+    "music_retro_arcade": "assets/audio/retro_arcade_mystery.mp3"
+  },
+  "scenes": [
+    {
+      "id": "scene_1",
+      "bg": "bg_arcade_retro",
+      "narration_text": "The ghosts weren't actually smart.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "duck_to_narration_pct": null,
+      "bg_music": {
+        "asset": "music_retro_arcade",
+        "trigger_word_index": 0,
+        "fade_in_sec": 0.8
+      },
+      "sfx": [
+        {
+          "asset": "sfx_arcade_beep",
+          "trigger_word_index": 0,
+          "volume": 0.45
+        }
+      ],
+      "elements": [
+        {
+          "id": "pacman_gameplay",
+          "asset": "img_pacman_gameplay",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                570,
+                760
+              ],
+              "target_width_frac": 0.82,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1870
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_2",
+      "bg": "bg_arcade_retro",
+      "narration_text": "Pac-Man came out in 1980, and every ghost runs on rules way simpler than people think.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.2,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.3
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [
+        {
+          "asset": "sfx_pop",
+          "trigger_word_index": 4,
+          "volume": 0.5
+        }
+      ],
+      "elements": [
+        {
+          "id": "pacman_gameplay",
+          "asset": "img_pacman_gameplay",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                560,
+                720
+              ],
+              "target_width_frac": 0.78,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                870,
+                1870
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_3",
+      "bg": "bg_arcade_closeup",
+      "narration_text": "Quick side note: it wasn't even called Pac-Man in Japan. It was Puck Man.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "push",
+        "direction": "left",
+        "style": "hard",
+        "duration_sec": 0.35
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [
+        {
+          "asset": "sfx_arcade_beep",
+          "trigger_word_index": 10,
+          "volume": 0.35
+        }
+      ],
+      "elements": [
+        {
+          "id": "puckman_comparison",
+          "asset": "img_pacman_puckman",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                760
+              ],
+              "target_width_frac": 0.86,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_relaxed",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1880
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_4",
+      "bg": "bg_white",
+      "narration_text": "Each ghost flips between two modes: chase you, then scatter to a corner.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.25
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [
+        {
+          "asset": "sfx_whoosh",
+          "trigger_word_index": 7,
+          "volume": 0.4
+        }
+      ],
+      "elements": [
+        {
+          "id": "chase_scatter",
+          "asset": "img_chase_scatter_diagram",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                700
+              ],
+              "target_width_frac": 0.62,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_relaxed",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1880
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_5",
+      "bg": "bg_cyber",
+      "narration_text": "That's a state machine. It's not deciding anything. It's checking: is it time to switch yet?",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "zoom_out",
+        "duration_sec": 0.4,
+        "zoom_scale": 1.2
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [
+        {
+          "asset": "sfx_pop",
+          "trigger_word_index": 3,
+          "volume": 0.45
+        }
+      ],
+      "elements": [
+        {
+          "id": "state_machine",
+          "asset": "img_state_machine",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                610,
+                700
+              ],
+              "target_width_frac": 0.65,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_laptop",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1870
+              ],
+              "target_height_frac": 0.31,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_6",
+      "bg": "bg_white",
+      "narration_text": "It's a light switch flipping on a stopwatch. Not a brain making decisions.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.2,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.25
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_relaxed",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1880
+              ],
+              "target_height_frac": 0.31,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_7",
+      "bg": "bg_white",
+      "narration_text": "Blinky, the red one, targets your current tile. No strategy. Just a rule.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "push",
+        "direction": "right",
+        "style": "soft",
+        "duration_sec": 0.3,
+        "feather_frac": 0.03
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [
+        {
+          "asset": "sfx_pop",
+          "trigger_word_index": 0,
+          "volume": 0.35
+        }
+      ],
+      "elements": [
+        {
+          "id": "blinky_target",
+          "asset": "img_blinky_target",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                650,
+                720
+              ],
+              "target_width_frac": 0.58,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1870
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_8",
+      "bg": "bg_white",
+      "narration_text": "Pinky aims four tiles ahead of you, trying to cut you off.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.25
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [
+        {
+          "asset": "sfx_whoosh",
+          "trigger_word_index": 5,
+          "volume": 0.35
+        }
+      ],
+      "elements": [
+        {
+          "id": "pinky_target",
+          "asset": "img_pinky_target",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                430,
+                720
+              ],
+              "target_width_frac": 0.6,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                890,
+                1870
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_9",
+      "bg": "bg_cyber",
+      "narration_text": "Inky does math using Blinky's position and Pac-Man's position.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "zoom_out",
+        "duration_sec": 0.35,
+        "zoom_scale": 1.2
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [
+        {
+          "asset": "sfx_pop",
+          "trigger_word_index": 2,
+          "volume": 0.35
+        }
+      ],
+      "elements": [
+        {
+          "id": "inky_vector",
+          "asset": "img_inky_vector",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                640,
+                690
+              ],
+              "target_width_frac": 0.65,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_laptop",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1870
+              ],
+              "target_height_frac": 0.31,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_10",
+      "bg": "bg_white",
+      "narration_text": "Clyde chases you, then backs off and returns toward his corner.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.25
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [
+        {
+          "asset": "sfx_whoosh",
+          "trigger_word_index": 5,
+          "volume": 0.4
+        }
+      ],
+      "elements": [
+        {
+          "id": "clyde_behavior",
+          "asset": "img_clyde_behavior",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                620,
+                700
+              ],
+              "target_width_frac": 0.62,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_excited",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                870,
+                1870
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_11",
+      "bg": "bg_white",
+      "narration_text": "More rules. Still not thinking. Just if-then statements stacked together.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.25
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_relaxed",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1880
+              ],
+              "target_height_frac": 0.31,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_12",
+      "bg": "bg_arcade_retro",
+      "narration_text": "And level 256 is where the whole thing falls apart.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "zoom_out",
+        "duration_sec": 0.45,
+        "zoom_scale": 1.25
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": {
+        "asset": "music_retro_arcade",
+        "trigger_word_index": 1,
+        "fade_in_sec": 0.6
+      },
+      "sfx": [
+        {
+          "asset": "sfx_reveal",
+          "trigger_word_index": 3,
+          "volume": 0.585
+        }
+      ],
+      "elements": [
+        {
+          "id": "killscreen",
+          "asset": "img_killscreen",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                570,
+                720
+              ],
+              "target_width_frac": 0.86,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                875,
+                1870
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_13",
+      "bg": "bg_cyber",
+      "narration_text": "The level counter is one byte: eight bits. That only counts to 255.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "push",
+        "direction": "left",
+        "style": "soft",
+        "duration_sec": 0.35,
+        "feather_frac": 0.03
+      },
+      "duck_to_narration_pct": null,
+      "sfx": [
+        {
+          "asset": "sfx_arcade_beep",
+          "trigger_word_index": 7,
+          "volume": 0.45
+        }
+      ],
+      "elements": [
+        {
+          "id": "byte_counter",
+          "asset": "img_level_counter_byte",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                640,
+                700
+              ],
+              "target_width_frac": 0.68,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_laptop",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1870
+              ],
+              "target_height_frac": 0.31,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_14",
+      "bg": "bg_cyber",
+      "narration_text": "256 has nowhere to live, so it rolls over to zero and corrupts the fruit.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.3
+      },
+      "duck_to_narration_pct": null,
+      "sfx": [
+        {
+          "asset": "sfx_glitch",
+          "trigger_word_index": 7,
+          "volume": 0.6
+        },
+        {
+          "asset": "sfx_error",
+          "trigger_word_index": 11,
+          "volume": 0.45
+        }
+      ],
+      "elements": [
+        {
+          "id": "byte_overflow",
+          "asset": "img_byte_overflow",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                600
+              ],
+              "target_width_frac": 0.68,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "corrupted_fruit",
+          "asset": "img_corrupted_fruit",
+          "z_index": 6,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 10,
+              "pos": [
+                540,
+                980
+              ],
+              "target_width_frac": 0.7,
+              "opacity": 0.0,
+              "easing": "instant"
+            },
+            {
+              "trigger_word_index": 11,
+              "pos": [
+                540,
+                980
+              ],
+              "target_width_frac": 0.7,
+              "opacity": 1.0,
+              "easing": "bounce"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_laptop",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                870,
+                1870
+              ],
+              "target_height_frac": 0.31,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_15",
+      "bg": "bg_arcade_retro",
+      "narration_text": "That same overflow corrupts half the maze, covering pellets with garbage.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.3
+      },
+      "duck_to_narration_pct": null,
+      "sfx": [
+        {
+          "asset": "sfx_glitch",
+          "trigger_word_index": 3,
+          "volume": 0.55
+        }
+      ],
+      "elements": [
+        {
+          "id": "corrupted_maze",
+          "asset": "img_corrupted_maze",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                590,
+                730
+              ],
+              "target_width_frac": 0.84,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1870
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_16",
+      "bg": "bg_white",
+      "narration_text": "The pellets are still technically there. You just can't see or reach them.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.25
+      },
+      "duck_to_narration_pct": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_relaxed",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1880
+              ],
+              "target_height_frac": 0.31,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_17",
+      "bg": "bg_arcade_closeup",
+      "narration_text": "You can't clear every pellet, so you can't finish the level. The bug became arcade legend.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "push",
+        "direction": "right",
+        "style": "hard",
+        "duration_sec": 0.35
+      },
+      "duck_to_narration_pct": null,
+      "sfx": [
+        {
+          "asset": "sfx_glitch",
+          "trigger_word_index": 13,
+          "volume": 0.35
+        }
+      ],
+      "elements": [
+        {
+          "id": "arcade_crowd",
+          "asset": "img_arcade_crowd",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                600,
+                760
+              ],
+              "target_width_frac": 0.85,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_excited",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                170,
+                1870
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_18",
+      "bg": "bg_arcade_retro",
+      "narration_text": "The unbeatable level isn't a secret boss. It's a math error.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.25,
+      "transition_in": {
+        "type": "zoom_out",
+        "duration_sec": 0.45,
+        "zoom_scale": 1.3
+      },
+      "duck_to_narration_pct": null,
+      "sfx": [
+        {
+          "asset": "sfx_reveal",
+          "trigger_word_index": 7,
+          "volume": 0.585
+        }
+      ],
+      "elements": [
+        {
+          "id": "killscreen_full",
+          "asset": "img_killscreen_full",
+          "z_index": 5,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                760
+              ],
+              "target_width_frac": 0.88,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        },
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1870
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_19",
+      "bg": "bg_white",
+      "narration_text": "Follow for more weird tech stories like this one.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.3,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.35
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": {
+        "stop": true,
+        "trigger_word_index": 0,
+        "fade_in_sec": 0.8
+      },
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1870
+              ],
+              "target_height_frac": 0.3,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

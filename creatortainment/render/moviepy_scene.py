@@ -9,11 +9,13 @@ import numpy as np
 from moviepy import (
     AudioFileClip,
     AudioClip,
+    CompositeAudioClip,
     CompositeVideoClip,
     ImageClip,
     TextClip,
     VideoClip,
     concatenate_videoclips,
+    vfx,
 )
 from PIL import Image, ImageFont
 
@@ -422,7 +424,7 @@ def build_full_video_clip(
     assets_root: Path,
     project_dir: Path,
 ):
-    """Build every scene in order and concatenate them with hard cuts."""
+    """Build scenes on one timeline, overlapping real scene transitions."""
     scenes = script.get("scenes", [])
     scene_manifests = manifest.get("scenes", [])
     if len(scene_manifests) != len(scenes):
@@ -432,7 +434,7 @@ def build_full_video_clip(
     if not scenes:
         raise ValueError("Cannot build a video without scenes.")
 
-    scene_clips = []
+    scene_units = []
     scene_offsets = build_scene_final_offsets(script, manifest)
     for index, (scene, scene_manifest) in enumerate(zip(scenes, scene_manifests)):
         scene_clip = build_static_scene_clip(
@@ -461,14 +463,72 @@ def build_full_video_clip(
                 duration=pause,
                 fps=44100,
             )
-            scene_clips.append(filler.with_audio(silent_audio))
-        scene_clips.append(narrated_clip)
-    final_clip = concatenate_videoclips(scene_clips, method="chain")
-    if final_clip.audio is None:
+            unit_parts = [filler.with_audio(silent_audio)]
+        else:
+            unit_parts = []
+        unit_parts.append(narrated_clip)
+        unit = concatenate_videoclips(unit_parts, method="chain")
+        scene_units.append(unit)
+
+    positioned = []
+    audio_layers = []
+    for index, (unit, offset) in enumerate(zip(scene_units, scene_offsets)):
+        transition = script["scenes"][index].get("transition_in")
+        if transition is not None:
+            duration = float(transition["duration_sec"])
+            if transition["type"] == "crossfade":
+                unit = unit.with_effects([vfx.CrossFadeIn(duration)])
+            elif transition["type"] == "zoom_out":
+                scale = float(transition.get("zoom_scale", 1.3))
+                unit = unit.with_effects(
+                    [
+                        vfx.Resize(
+                            lambda t: scale
+                            - (scale - 1.0) * min(1.0, max(0.0, t / duration))
+                        ),
+                        vfx.CrossFadeIn(duration),
+                    ]
+                ).with_position(("center", "center"))
+            elif transition["type"] == "push":
+                unit = _apply_push_transition(
+                    unit,
+                    transition,
+                    duration,
+                    tuple(script["project"]["resolution"]),
+                )
+            else:
+                raise ValueError(f"Unsupported transition type: {transition['type']!r}")
+
+        outgoing = script["scenes"][index + 1].get("transition_in") if index + 1 < len(scene_units) else None
+        if outgoing is not None:
+            outgoing_duration = float(outgoing["duration_sec"])
+            if outgoing["type"] in {"crossfade", "zoom_out"}:
+                unit = unit.with_effects([vfx.CrossFadeOut(outgoing_duration)])
+            elif outgoing["type"] == "push":
+                unit = _apply_push_outgoing(
+                    unit,
+                    outgoing,
+                    outgoing_duration,
+                    tuple(script["project"]["resolution"]),
+                )
+        positioned.append(unit.with_start(offset.final_start_sec))
+        if unit.audio is not None:
+            audio_layers.append(unit.audio.with_start(offset.final_start_sec))
+
+    final_duration = max(
+        offset.final_start_sec + offset.unit_duration_sec
+        for offset in scene_offsets
+    )
+    final_clip = CompositeVideoClip(
+        positioned,
+        size=tuple(script["project"]["resolution"]),
+    ).with_duration(final_duration)
+    if not audio_layers:
         raise RuntimeError("Final assembled video has no narration audio to mix.")
+    narration_timeline = CompositeAudioClip(audio_layers).with_duration(final_duration)
     final_clip = final_clip.with_audio(
         build_final_audio_mix(
-            final_clip.audio,
+            narration_timeline,
             script,
             manifest,
             assets_root,
@@ -476,3 +536,77 @@ def build_full_video_clip(
         )
     )
     return final_clip
+
+
+def _apply_push_transition(
+    clip: VideoClip,
+    transition: dict[str, Any],
+    duration: float,
+    resolution: tuple[int, int],
+) -> VideoClip:
+    """Slide a scene into place, optionally feathering its leading edge."""
+    width, height = resolution
+    direction = transition["direction"]
+    incoming_from = width if direction == "left" else -width
+
+    def position(t: float) -> tuple[float, float]:
+        progress = min(1.0, max(0.0, float(t) / duration))
+        x = incoming_from * (1.0 - progress)
+        return x, 0
+
+    result = clip.with_position(position)
+    if transition.get("style") != "soft":
+        return result
+
+    feather = max(1, round(float(transition.get("feather_frac", 0.03)) * width))
+    base_mask = result.mask
+
+    def mask_frame(t: float) -> np.ndarray:
+        progress = min(1.0, max(0.0, float(t) / duration))
+        mask = np.ones((height, width), dtype=float)
+        if direction == "left":
+            ramp = np.clip(np.arange(width, dtype=float) / feather, 0.0, 1.0)
+        else:
+            ramp = np.clip(
+                (np.arange(width - 1, -1, -1, dtype=float)) / feather,
+                0.0,
+                1.0,
+            )
+        ramp = np.minimum(1.0, ramp + progress)
+        mask *= ramp[np.newaxis, :]
+        if base_mask is not None:
+            existing = np.asarray(base_mask.get_frame(t), dtype=float)
+            if existing.shape == mask.shape:
+                mask *= existing
+        return mask
+
+    return result.with_mask(
+        VideoClip(
+            frame_function=mask_frame,
+            is_mask=True,
+            duration=clip.duration,
+            has_constant_size=True,
+        )
+    )
+
+
+def _apply_push_outgoing(
+    clip: VideoClip,
+    transition: dict[str, Any],
+    duration: float,
+    resolution: tuple[int, int],
+) -> VideoClip:
+    """Slide the outgoing scene off the edge during its final transition."""
+    width, _ = resolution
+    direction = transition["direction"]
+    destination = -width if direction == "left" else width
+    start_time = float(clip.duration) - duration
+
+    def position(t: float) -> tuple[float, float]:
+        progress = min(
+            1.0,
+            max(0.0, (float(t) - start_time) / duration),
+        )
+        return destination * progress, 0
+
+    return clip.with_position(position)
