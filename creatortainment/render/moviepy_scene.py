@@ -524,6 +524,11 @@ def _apply_scene_transition_effects(
     )
     incoming_type = incoming["type"] if incoming is not None else None
     outgoing_type = outgoing["type"] if outgoing is not None else None
+    incoming_feather = (
+        max(1, round(float(incoming.get("feather_frac", 0.03)) * width))
+        if incoming_type == "push" and incoming.get("style") == "soft"
+        else 0
+    )
 
     if incoming_type == "zoom_out":
         zoom_scale = float(incoming.get("zoom_scale", 1.3))
@@ -546,7 +551,9 @@ def _apply_scene_transition_effects(
         if incoming_type == "push" and local_time < incoming_duration:
             progress = min(1.0, max(0.0, local_time / incoming_duration))
             start_x = width if incoming["direction"] == "left" else -width
-            return start_x * (1.0 - progress), 0.0
+            overlap = incoming_feather * (1.0 - progress)
+            overlap_sign = -1.0 if incoming["direction"] == "left" else 1.0
+            return start_x * (1.0 - progress) + overlap_sign * overlap, 0.0
         if outgoing_type == "push" and local_time >= clip.duration - outgoing_duration:
             progress = min(
                 1.0,

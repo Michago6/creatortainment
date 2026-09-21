@@ -37,6 +37,34 @@ def test_soft_push_feathers_the_incoming_leading_edge() -> None:
         clip.close()
 
 
+def test_soft_push_creates_an_overlap_band_for_the_fade() -> None:
+    """Soft push overlaps the outgoing edge instead of fading into empty canvas."""
+    clip = ColorClip((100, 60), color=(255, 0, 0), duration=1.0)
+    try:
+        hard = _apply_scene_transition_effects(
+            clip,
+            {"type": "push", "direction": "right", "style": "hard", "duration_sec": 0.5},
+            None,
+            (100, 60),
+        )
+        soft = _apply_scene_transition_effects(
+            clip,
+            {
+                "type": "push",
+                "direction": "right",
+                "style": "soft",
+                "duration_sec": 0.5,
+                "feather_frac": 0.2,
+            },
+            None,
+            (100, 60),
+        )
+        assert hard.pos(0.25)[0] == -50.0
+        assert soft.pos(0.25)[0] == -40.0
+    finally:
+        clip.close()
+
+
 def test_hard_push_has_no_feather_mask() -> None:
     """Hard push remains a plain slide without an incoming alpha mask."""
     clip = ColorClip((100, 60), color=(255, 0, 0), duration=1.0)
