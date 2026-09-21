@@ -31,6 +31,8 @@ from .keyframes import resolve_element_state
 from .timeline import build_scene_final_offsets
 from ..timeline import timed_element
 
+SOFT_PUSH_FEATHER_FRAC = 0.25
+
 
 def _cover_background(path: Path, resolution: tuple[int, int], duration: float) -> ImageClip:
     width, height = resolution
@@ -525,8 +527,13 @@ def _apply_scene_transition_effects(
     incoming_type = incoming["type"] if incoming is not None else None
     outgoing_type = outgoing["type"] if outgoing is not None else None
     incoming_feather = (
-        max(1, round(float(incoming.get("feather_frac", 0.03)) * width))
+        max(1, round(SOFT_PUSH_FEATHER_FRAC * width))
         if incoming_type == "push" and incoming.get("style") == "soft"
+        else 0
+    )
+    outgoing_feather = (
+        max(1, round(SOFT_PUSH_FEATHER_FRAC * width))
+        if outgoing_type == "push" and outgoing.get("style") == "soft"
         else 0
     )
 
@@ -550,10 +557,13 @@ def _apply_scene_transition_effects(
             return (width * (1.0 - scale) / 2.0, height * (1.0 - scale) / 2.0)
         if incoming_type == "push" and local_time < incoming_duration:
             progress = min(1.0, max(0.0, local_time / incoming_duration))
-            start_x = width if incoming["direction"] == "left" else -width
-            overlap = incoming_feather * (1.0 - progress)
-            overlap_sign = -1.0 if incoming["direction"] == "left" else 1.0
-            return start_x * (1.0 - progress) + overlap_sign * overlap, 0.0
+            start_width = (
+                width / 2.0
+                if incoming.get("style") == "soft"
+                else width
+            )
+            start_x = start_width if incoming["direction"] == "left" else -start_width
+            return start_x * (1.0 - progress), 0.0
         if outgoing_type == "push" and local_time >= clip.duration - outgoing_duration:
             progress = min(
                 1.0,
@@ -569,40 +579,63 @@ def _apply_scene_transition_effects(
 
     clip = clip.with_position(position)
 
-    if incoming_type == "push" and incoming.get("style") == "soft":
-        clip = _apply_soft_push_mask(
-            clip,
-            incoming,
-            incoming_duration,
-            width,
-            height,
-        )
-
-    if incoming_type in {"crossfade", "zoom_out"} or outgoing_type in {
-        "crossfade",
-        "zoom_out",
-    }:
+    if (
+        incoming_type in {"crossfade", "zoom_out"}
+        or outgoing_type in {"crossfade", "zoom_out"}
+        or incoming_feather
+        or outgoing_feather
+    ):
         if clip.mask is None:
             clip = clip.with_mask()
         base_mask = clip.mask
 
-        def opacity_at_time(t: float) -> float:
+        def mask_frame(get_frame, t):
             local_time = float(t)
+            mask = np.asarray(get_frame(t), dtype=float)
             if incoming_type in {"crossfade", "zoom_out"} and local_time < incoming_duration:
-                return min(1.0, max(0.0, local_time / incoming_duration))
+                mask *= min(1.0, max(0.0, local_time / incoming_duration))
             if outgoing_type in {"crossfade", "zoom_out"}:
                 exit_start = float(clip.duration) - outgoing_duration
                 if local_time >= exit_start:
-                    return min(
+                    mask *= min(
                         1.0,
                         max(0.0, (float(clip.duration) - local_time) / outgoing_duration),
                     )
-            return 1.0
+            if incoming_feather and incoming_type == "push" and local_time < incoming_duration:
+                if incoming["direction"] == "left":
+                    ramp = np.clip(
+                        np.arange(width, dtype=float) / incoming_feather,
+                        0.0,
+                        1.0,
+                    )
+                else:
+                    ramp = np.clip(
+                        np.arange(width - 1, -1, -1, dtype=float) / incoming_feather,
+                        0.0,
+                        1.0,
+                    )
+                mask *= ramp[np.newaxis, :]
+            if outgoing_feather and outgoing_type == "push":
+                exit_start = float(clip.duration) - outgoing_duration
+                if local_time >= exit_start:
+                    if outgoing["direction"] == "left":
+                        ramp = np.ones(width, dtype=float)
+                        ramp[-outgoing_feather:] = np.linspace(
+                            1.0,
+                            0.0,
+                            outgoing_feather,
+                        )
+                    else:
+                        ramp = np.ones(width, dtype=float)
+                        ramp[:outgoing_feather] = np.linspace(
+                            0.0,
+                            1.0,
+                            outgoing_feather,
+                        )
+                    mask *= ramp[np.newaxis, :]
+            return mask
 
-        clip.mask = base_mask.transform(
-            lambda get_frame, t: get_frame(t) * opacity_at_time(t),
-            keep_duration=True,
-        )
+        clip.mask = base_mask.transform(mask_frame, keep_duration=True)
     return clip
 
 
@@ -614,7 +647,7 @@ def _apply_soft_push_mask(
     height: int,
 ) -> VideoClip:
     """Feather only the incoming push edge during its entrance window."""
-    feather = max(1, round(float(transition.get("feather_frac", 0.03)) * width))
+    feather = max(1, round(SOFT_PUSH_FEATHER_FRAC * width))
     if clip.mask is None:
         clip = clip.with_mask()
     base_mask = clip.mask
@@ -651,7 +684,11 @@ def _apply_push_transition(
 
     def position(t: float) -> tuple[float, float]:
         progress = min(1.0, max(0.0, float(t) / duration))
-        x = incoming_from * (1.0 - progress)
+        if transition.get("style") == "soft":
+            start = incoming_from / 2.0
+        else:
+            start = incoming_from
+        x = start * (1.0 - progress)
         return x, 0
 
     result = clip.with_position(position)

@@ -60,7 +60,7 @@ def test_soft_push_creates_an_overlap_band_for_the_fade() -> None:
             (100, 60),
         )
         assert hard.pos(0.25)[0] == -50.0
-        assert soft.pos(0.25)[0] == -40.0
+        assert soft.pos(0.25)[0] == -25.0
     finally:
         clip.close()
 
