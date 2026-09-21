@@ -474,43 +474,13 @@ def build_full_video_clip(
     audio_layers = []
     for index, (unit, offset) in enumerate(zip(scene_units, scene_offsets)):
         transition = script["scenes"][index].get("transition_in")
-        if transition is not None:
-            duration = float(transition["duration_sec"])
-            if transition["type"] == "crossfade":
-                unit = unit.with_effects([vfx.CrossFadeIn(duration)])
-            elif transition["type"] == "zoom_out":
-                scale = float(transition.get("zoom_scale", 1.3))
-                unit = unit.with_effects(
-                    [
-                        vfx.Resize(
-                            lambda t: scale
-                            - (scale - 1.0) * min(1.0, max(0.0, t / duration))
-                        ),
-                        vfx.CrossFadeIn(duration),
-                    ]
-                ).with_position(("center", "center"))
-            elif transition["type"] == "push":
-                unit = _apply_push_transition(
-                    unit,
-                    transition,
-                    duration,
-                    tuple(script["project"]["resolution"]),
-                )
-            else:
-                raise ValueError(f"Unsupported transition type: {transition['type']!r}")
-
         outgoing = script["scenes"][index + 1].get("transition_in") if index + 1 < len(scene_units) else None
-        if outgoing is not None:
-            outgoing_duration = float(outgoing["duration_sec"])
-            if outgoing["type"] in {"crossfade", "zoom_out"}:
-                unit = unit.with_effects([vfx.CrossFadeOut(outgoing_duration)])
-            elif outgoing["type"] == "push":
-                unit = _apply_push_outgoing(
-                    unit,
-                    outgoing,
-                    outgoing_duration,
-                    tuple(script["project"]["resolution"]),
-                )
+        unit = _apply_scene_transition_effects(
+            unit,
+            transition,
+            outgoing,
+            tuple(script["project"]["resolution"]),
+        )
         positioned.append(unit.with_start(offset.final_start_sec))
         if unit.audio is not None:
             audio_layers.append(unit.audio.with_start(offset.final_start_sec))
@@ -538,6 +508,129 @@ def build_full_video_clip(
     return final_clip
 
 
+def _apply_scene_transition_effects(
+    clip: VideoClip,
+    incoming: dict[str, Any] | None,
+    outgoing: dict[str, Any] | None,
+    resolution: tuple[int, int],
+) -> VideoClip:
+    """Apply entrance and exit transitions without overwriting clip attributes."""
+    width, height = resolution
+    incoming_duration = (
+        float(incoming["duration_sec"]) if incoming is not None else 0.0
+    )
+    outgoing_duration = (
+        float(outgoing["duration_sec"]) if outgoing is not None else 0.0
+    )
+    incoming_type = incoming["type"] if incoming is not None else None
+    outgoing_type = outgoing["type"] if outgoing is not None else None
+
+    if incoming_type == "zoom_out":
+        zoom_scale = float(incoming.get("zoom_scale", 1.3))
+
+        def scale_at_time(t: float) -> float:
+            progress = min(1.0, max(0.0, float(t) / incoming_duration))
+            return zoom_scale - (zoom_scale - 1.0) * progress
+
+        clip = clip.with_effects([vfx.Resize(scale_at_time)])
+
+    def position(t: float) -> tuple[float, float]:
+        local_time = float(t)
+        if incoming_type == "zoom_out" and local_time < incoming_duration:
+            scale = (
+                float(incoming.get("zoom_scale", 1.3))
+                - (float(incoming.get("zoom_scale", 1.3)) - 1.0)
+                * min(1.0, max(0.0, local_time / incoming_duration))
+            )
+            return (width * (1.0 - scale) / 2.0, height * (1.0 - scale) / 2.0)
+        if incoming_type == "push" and local_time < incoming_duration:
+            progress = min(1.0, max(0.0, local_time / incoming_duration))
+            start_x = width if incoming["direction"] == "left" else -width
+            return start_x * (1.0 - progress), 0.0
+        if outgoing_type == "push" and local_time >= clip.duration - outgoing_duration:
+            progress = min(
+                1.0,
+                max(
+                    0.0,
+                    (local_time - (clip.duration - outgoing_duration))
+                    / outgoing_duration,
+                ),
+            )
+            destination = -width if outgoing["direction"] == "left" else width
+            return destination * progress, 0.0
+        return 0.0, 0.0
+
+    clip = clip.with_position(position)
+
+    if incoming_type == "push" and incoming.get("style") == "soft":
+        clip = _apply_soft_push_mask(
+            clip,
+            incoming,
+            incoming_duration,
+            width,
+            height,
+        )
+
+    if incoming_type in {"crossfade", "zoom_out"} or outgoing_type in {
+        "crossfade",
+        "zoom_out",
+    }:
+        if clip.mask is None:
+            clip = clip.with_mask()
+        base_mask = clip.mask
+
+        def opacity_at_time(t: float) -> float:
+            local_time = float(t)
+            if incoming_type in {"crossfade", "zoom_out"} and local_time < incoming_duration:
+                return min(1.0, max(0.0, local_time / incoming_duration))
+            if outgoing_type in {"crossfade", "zoom_out"}:
+                exit_start = float(clip.duration) - outgoing_duration
+                if local_time >= exit_start:
+                    return min(
+                        1.0,
+                        max(0.0, (float(clip.duration) - local_time) / outgoing_duration),
+                    )
+            return 1.0
+
+        clip.mask = base_mask.transform(
+            lambda get_frame, t: get_frame(t) * opacity_at_time(t),
+            keep_duration=True,
+        )
+    return clip
+
+
+def _apply_soft_push_mask(
+    clip: VideoClip,
+    transition: dict[str, Any],
+    duration: float,
+    width: int,
+    height: int,
+) -> VideoClip:
+    """Feather only the incoming push edge during its entrance window."""
+    feather = max(1, round(float(transition.get("feather_frac", 0.03)) * width))
+    if clip.mask is None:
+        clip = clip.with_mask()
+    base_mask = clip.mask
+    direction = transition["direction"]
+
+    def mask_frame(get_frame, t):
+        current = np.asarray(get_frame(t), dtype=float)
+        if float(t) >= duration:
+            return current
+        if direction == "left":
+            ramp = np.clip(np.arange(width, dtype=float) / feather, 0.0, 1.0)
+        else:
+            ramp = np.clip(
+                np.arange(width - 1, -1, -1, dtype=float) / feather,
+                0.0,
+                1.0,
+            )
+        return current * ramp[np.newaxis, :]
+
+    clip.mask = base_mask.transform(mask_frame, keep_duration=True)
+    return clip
+
+
 def _apply_push_transition(
     clip: VideoClip,
     transition: dict[str, Any],
@@ -562,17 +655,15 @@ def _apply_push_transition(
     base_mask = result.mask
 
     def mask_frame(t: float) -> np.ndarray:
-        progress = min(1.0, max(0.0, float(t) / duration))
         mask = np.ones((height, width), dtype=float)
         if direction == "left":
             ramp = np.clip(np.arange(width, dtype=float) / feather, 0.0, 1.0)
         else:
             ramp = np.clip(
-                (np.arange(width - 1, -1, -1, dtype=float)) / feather,
+                (np.arange(width, 0, -1, dtype=float)) / feather,
                 0.0,
                 1.0,
             )
-        ramp = np.minimum(1.0, ramp + progress)
         mask *= ramp[np.newaxis, :]
         if base_mask is not None:
             existing = np.asarray(base_mask.get_frame(t), dtype=float)
