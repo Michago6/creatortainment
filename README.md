@@ -319,6 +319,21 @@ Image generation uses the project's explicit `project.resolution`; it does not
 infer dimensions from prompt text. FAL credentials are loaded from `FAL_KEY`
 in the repository `.env` setup described above.
 
+### Storyboard
+
+Once you have all the assets for your video, you can generate a storyboard to
+see what the project will look like:
+
+```bash
+.venv/bin/python -m creatortainment storyboard <script.json>
+```
+
+This is the fastest way to get an overview of the project's scenes, asset
+placement, composition, and captions before spending time on narration
+alignment or a video render. The storyboard is written to the project's
+`storyboard.png` file. Use `--out <path>` to choose another output path inside
+the project folder.
+
 ### Align
 
 ```bash
