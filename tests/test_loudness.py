@@ -14,7 +14,7 @@ from creatortainment.audio.loudness import (
 ROOT = Path(__file__).parents[1]
 PROJECT = ROOT / "projects/understanding_gpu_architecture"
 NARRATION = next((PROJECT / "narrations").glob("*.mp3"))
-MUSIC = ROOT / "assets/audio/monkeys_spinning_monkeys.mp3"
+MUSIC = ROOT / "assets/testing/audio/monkeys_spinning_monkeys.mp3"
 
 
 def test_measure_real_narration_and_music_files() -> None:
