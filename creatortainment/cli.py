@@ -20,6 +20,7 @@ from .audio.manifest import (
     read_manifest,
     write_manifest,
 )
+from .asset_generation import generate_assets
 from . import config
 from .project_identity import (
     new_state,
@@ -174,6 +175,32 @@ def validate_command(script_path: Path, asset_gen_info: bool = False) -> int:
     for error in result.errors:
         _print_validation_error(error)
     return 1
+
+
+def generate_assets_command(script_path: Path, force: bool) -> int:
+    script = load_script(script_path)
+    result = validate_script(script, ASSETS_ROOT)
+    if not result.valid:
+        print("Cannot generate assets for an invalid script:", file=sys.stderr)
+        for error in result.errors:
+            _print_validation_error(error)
+        return 1
+    try:
+        generated, skipped, failed = generate_assets(
+            script,
+            ASSETS_ROOT,
+            force=force,
+        )
+    except Exception as exc:
+        print(f"Asset generation failed: {exc}", file=sys.stderr)
+        return 1
+    for asset_key in generated:
+        print(f"Generated: {asset_key}")
+    for asset_key in skipped:
+        print(f"Skipped (already exists): {asset_key}")
+    for error in failed:
+        print(f"Failed: {error}", file=sys.stderr)
+    return 1 if failed else 0
 
 
 def render_command(script_path: Path, output: Path | None, preview: bool) -> int:
@@ -430,6 +457,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print effective generation models for generated assets.",
     )
+    generate = commands.add_parser(
+        "generate-assets",
+        help="Generate missing assets declared by a script.",
+    )
+    generate.add_argument("script", type=Path)
+    generate.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate assets even when their destination already exists.",
+    )
     render = commands.add_parser("render", help="Render the script to an MP4 video.")
     render.add_argument("script", type=Path)
     render.add_argument("--out", type=Path, help="Output MP4 path relative to the project.")
@@ -455,6 +492,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "validate":
         return validate_command(args.script, args.asset_gen_info)
+    if args.command == "generate-assets":
+        return generate_assets_command(args.script, args.force)
     if args.command == "render":
         return render_command(args.script, args.out, args.preview)
     if args.command == "storyboard":

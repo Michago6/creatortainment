@@ -297,6 +297,28 @@ used to identify the missing configuration. Provider failures are reported
 with concise status or configuration details; raw HTTP headers, trace IDs,
 and full API response bodies are not printed.
 
+### Generate assets
+
+Generate all missing assets with a non-null `generate` block in a current-format
+script:
+
+```bash
+.venv/bin/python -m creatortainment generate-assets <script.json>
+```
+
+The command resolves each asset's model from `generate.model`, then
+`project.generation_defaults[generation_method]`, creates destination
+directories, and processes source-asset dependencies before their consumers.
+Existing files are skipped by default. Use `--force` to regenerate them:
+
+```bash
+.venv/bin/python -m creatortainment generate-assets <script.json> --force
+```
+
+Image generation uses the project's explicit `project.resolution`; it does not
+infer dimensions from prompt text. FAL credentials are loaded from `FAL_KEY`
+in the repository `.env` setup described above.
+
 ### Align
 
 ```bash
@@ -328,6 +350,7 @@ For command help:
 ```bash
 .venv/bin/python -m creatortainment --help
 .venv/bin/python -m creatortainment validate --help
+.venv/bin/python -m creatortainment generate-assets --help
 .venv/bin/python -m creatortainment align --help
 .venv/bin/python -m creatortainment render --help
 .venv/bin/python -m creatortainment storyboard --help
