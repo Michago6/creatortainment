@@ -71,11 +71,17 @@ def test_cue_mapping_accumulates_late_scene_pauses() -> None:
     prior_duration_and_pauses = sum(
         float(item["duration_sec"])
         + (float(script["scenes"][index].get("pause_before_sec", 0.0)) if index > 0 else 0.0)
+        - (
+            float(script["scenes"][index].get("transition_in", {}).get("duration_sec", 0.0))
+            if index > 0
+            else 0.0
+        )
         for index, item in enumerate(manifest["scenes"][:scene_index])
     )
     expected = (
         prior_duration_and_pauses
         + float(scene.get("pause_before_sec", 0.0))
+        - float(scene.get("transition_in", {}).get("duration_sec", 0.0))
         + manifest["word_timestamps"][
             scene_manifest["word_offset"] + trigger_index
         ]["start"]

@@ -43,23 +43,52 @@ def scale_script_for_preview(script: dict) -> dict:
     width, height = (int(value) for value in script["project"]["resolution"])
     preview_width = max(1, round(width * 0.25))
     preview_height = max(1, round(height * 0.25))
-    scaled["project"]["resolution"] = [preview_width, preview_height]
+    project = scaled["project"]
+    _set_script_value(project, "resolution", [preview_width, preview_height])
 
-    project_style = scaled["project"].get("caption_style")
-    if isinstance(project_style, dict) and "font_size" in project_style:
-        project_style["font_size"] = max(1, round(float(project_style["font_size"]) * 0.25))
+    project_style = project.get("caption_style")
+    if project_style is not None and _has_script_value(project_style, "font_size"):
+        _set_script_value(
+            project_style,
+            "font_size",
+            max(1, round(float(project_style["font_size"]) * 0.25)),
+        )
     for scene in scaled.get("scenes", []):
         scene_style = scene.get("caption_style")
-        if isinstance(scene_style, dict) and "font_size" in scene_style:
-            scene_style["font_size"] = max(1, round(float(scene_style["font_size"]) * 0.25))
+        if scene_style is not None and _has_script_value(scene_style, "font_size"):
+            _set_script_value(
+                scene_style,
+                "font_size",
+                max(1, round(float(scene_style["font_size"]) * 0.25)),
+            )
         for element in scene.get("elements", []):
             for keyframe in element.get("keyframes", []):
-                if isinstance(keyframe.get("pos"), list) and len(keyframe["pos"]) == 2:
-                    keyframe["pos"] = [
-                        float(keyframe["pos"][0]) * 0.25,
-                        float(keyframe["pos"][1]) * 0.25,
-                    ]
+                position = keyframe.get("pos")
+                if isinstance(position, (list, tuple)) and len(position) == 2:
+                    _set_script_value(
+                        keyframe,
+                        "pos",
+                        [
+                            float(position[0]) * 0.25,
+                            float(position[1]) * 0.25,
+                        ],
+                    )
     return scaled
+
+
+def _has_script_value(value: object, key: str) -> bool:
+    """Check a script field on either a mapping-compatible model or a dict."""
+    if isinstance(value, dict):
+        return key in value
+    return key in value
+
+
+def _set_script_value(value: object, key: str, new_value: object) -> None:
+    """Set a script field on either a mapping-compatible model or a dict."""
+    if isinstance(value, dict):
+        value[key] = new_value
+    else:
+        value[key] = new_value
 
 
 def prepare_render_clip(clip, resolution: tuple[int, int], preview: bool):

@@ -10,3 +10,4 @@ generated_images/
 projects/
 archive/
 .pytest_cache/
+scripts/

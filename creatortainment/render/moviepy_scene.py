@@ -9,11 +9,13 @@ import numpy as np
 from moviepy import (
     AudioFileClip,
     AudioClip,
+    CompositeAudioClip,
     CompositeVideoClip,
     ImageClip,
     TextClip,
     VideoClip,
     concatenate_videoclips,
+    vfx,
 )
 from PIL import Image, ImageFont
 
@@ -28,6 +30,8 @@ from .mock import AssetDimensionCache, _asset_path
 from .keyframes import resolve_element_state
 from .timeline import build_scene_final_offsets
 from ..timeline import timed_element
+
+SOFT_PUSH_FEATHER_FRAC = 0.25
 
 
 def _cover_background(path: Path, resolution: tuple[int, int], duration: float) -> ImageClip:
@@ -422,7 +426,7 @@ def build_full_video_clip(
     assets_root: Path,
     project_dir: Path,
 ):
-    """Build every scene in order and concatenate them with hard cuts."""
+    """Build scenes on one timeline, overlapping real scene transitions."""
     scenes = script.get("scenes", [])
     scene_manifests = manifest.get("scenes", [])
     if len(scene_manifests) != len(scenes):
@@ -432,7 +436,7 @@ def build_full_video_clip(
     if not scenes:
         raise ValueError("Cannot build a video without scenes.")
 
-    scene_clips = []
+    scene_units = []
     scene_offsets = build_scene_final_offsets(script, manifest)
     for index, (scene, scene_manifest) in enumerate(zip(scenes, scene_manifests)):
         scene_clip = build_static_scene_clip(
@@ -461,14 +465,63 @@ def build_full_video_clip(
                 duration=pause,
                 fps=44100,
             )
-            scene_clips.append(filler.with_audio(silent_audio))
-        scene_clips.append(narrated_clip)
-    final_clip = concatenate_videoclips(scene_clips, method="chain")
-    if final_clip.audio is None:
+            unit_parts = [filler.with_audio(silent_audio)]
+        else:
+            unit_parts = []
+        unit_parts.append(narrated_clip)
+        unit = concatenate_videoclips(unit_parts, method="chain")
+        scene_units.append(unit)
+
+    positioned = []
+    audio_layers = []
+    layer_indices = list(range(len(scene_units)))
+    for index in range(len(scene_units) - 2, -1, -1):
+        next_transition = script["scenes"][index + 1].get("transition_in")
+        if (
+            next_transition is not None
+            and next_transition.get("type") == "push"
+            and next_transition.get("style") == "soft"
+        ):
+            layer_indices[index] = max(
+                layer_indices[index],
+                layer_indices[index + 1] + 1,
+            )
+    for index, (unit, offset) in enumerate(zip(scene_units, scene_offsets)):
+        transition = script["scenes"][index].get("transition_in")
+        outgoing = script["scenes"][index + 1].get("transition_in") if index + 1 < len(scene_units) else None
+        outgoing_start = (
+            scene_offsets[index + 1].final_start_sec
+            if outgoing is not None
+            else None
+        )
+        unit = _apply_scene_transition_effects(
+            unit,
+            transition,
+            outgoing,
+            tuple(script["project"]["resolution"]),
+            scene_start_sec=offset.final_start_sec,
+            outgoing_transition_start_sec=outgoing_start,
+        )
+        positioned.append(
+            unit.with_start(offset.final_start_sec).with_layer_index(layer_indices[index])
+        )
+        if unit.audio is not None:
+            audio_layers.append(unit.audio.with_start(offset.final_start_sec))
+
+    final_duration = max(
+        offset.final_start_sec + offset.unit_duration_sec
+        for offset in scene_offsets
+    )
+    final_clip = CompositeVideoClip(
+        positioned,
+        size=tuple(script["project"]["resolution"]),
+    ).with_duration(final_duration)
+    if not audio_layers:
         raise RuntimeError("Final assembled video has no narration audio to mix.")
+    narration_timeline = CompositeAudioClip(audio_layers).with_duration(final_duration)
     final_clip = final_clip.with_audio(
         build_final_audio_mix(
-            final_clip.audio,
+            narration_timeline,
             script,
             manifest,
             assets_root,
@@ -476,3 +529,149 @@ def build_full_video_clip(
         )
     )
     return final_clip
+
+
+def _apply_scene_transition_effects(
+    clip: VideoClip,
+    incoming: dict[str, Any] | None,
+    outgoing: dict[str, Any] | None,
+    resolution: tuple[int, int],
+    *,
+    scene_start_sec: float = 0.0,
+    outgoing_transition_start_sec: float | None = None,
+) -> VideoClip:
+    """Apply entrance and exit transitions without overwriting clip attributes."""
+    width, height = resolution
+    incoming_duration = (
+        float(incoming["duration_sec"]) if incoming is not None else 0.0
+    )
+    outgoing_duration = (
+        float(outgoing["duration_sec"]) if outgoing is not None else 0.0
+    )
+    incoming_type = incoming["type"] if incoming is not None else None
+    outgoing_type = outgoing["type"] if outgoing is not None else None
+    outgoing_feather = (
+        max(1, round(SOFT_PUSH_FEATHER_FRAC * width))
+        if outgoing_type == "push" and outgoing.get("style") == "soft"
+        else 0
+    )
+
+    if incoming_type == "zoom_out":
+        zoom_scale = float(incoming.get("zoom_scale", 1.3))
+
+        def scale_at_time(t: float) -> float:
+            progress = min(1.0, max(0.0, float(t) / incoming_duration))
+            return zoom_scale - (zoom_scale - 1.0) * progress
+
+        clip = clip.with_effects([vfx.Resize(scale_at_time)])
+
+    def position(t: float) -> tuple[float, float]:
+        local_time = float(t)
+        if incoming_type == "zoom_out" and local_time < incoming_duration:
+            scale = (
+                float(incoming.get("zoom_scale", 1.3))
+                - (float(incoming.get("zoom_scale", 1.3)) - 1.0)
+                * min(1.0, max(0.0, local_time / incoming_duration))
+            )
+            return (width * (1.0 - scale) / 2.0, height * (1.0 - scale) / 2.0)
+        if incoming_type == "push" and local_time < incoming_duration:
+            if incoming.get("style") == "soft":
+                return 0.0, 0.0
+            progress = min(1.0, max(0.0, local_time / incoming_duration))
+            start_x = width if incoming["direction"] == "left" else -width
+            return start_x * (1.0 - progress), 0.0
+        if (
+            outgoing_type == "push"
+            and outgoing.get("style") != "soft"
+            and local_time >= clip.duration - outgoing_duration
+        ):
+            progress = min(
+                1.0,
+                max(
+                    0.0,
+                    (local_time - (clip.duration - outgoing_duration))
+                    / outgoing_duration,
+                ),
+            )
+            destination = -width if outgoing["direction"] == "left" else width
+            return destination * progress, 0.0
+        return 0.0, 0.0
+
+    clip = clip.with_position(position)
+
+    if (
+        incoming_type in {"crossfade", "zoom_out"}
+        or outgoing_type in {"crossfade", "zoom_out"}
+        or outgoing_feather
+    ):
+        if clip.mask is None:
+            clip = clip.with_mask()
+        base_mask = clip.mask
+
+        def mask_frame(t):
+            local_time = float(t)
+            # Soft pushes are full-canvas scene wipes. Only the outgoing
+            # scene is masked; the incoming scene remains fully opaque below.
+            if outgoing_feather:
+                mask = np.ones((height, width), dtype=float)
+            else:
+                mask = np.asarray(base_mask.get_frame(t), dtype=float)
+                if mask.ndim != 2:
+                    mask = np.ones((height, width), dtype=float)
+            if incoming_type in {"crossfade", "zoom_out"} and local_time < incoming_duration:
+                mask *= min(1.0, max(0.0, local_time / incoming_duration))
+            if outgoing_type in {"crossfade", "zoom_out"}:
+                exit_start = float(clip.duration) - outgoing_duration
+                if local_time >= exit_start:
+                    mask *= min(
+                        1.0,
+                        max(0.0, (float(clip.duration) - local_time) / outgoing_duration),
+                    )
+            if outgoing_feather and outgoing_type == "push":
+                transition_start = (
+                    outgoing_transition_start_sec
+                    if outgoing_transition_start_sec is not None
+                    else scene_start_sec + clip.duration - outgoing_duration
+                )
+                absolute_time = scene_start_sec + local_time
+                progress = min(
+                    1.0,
+                    max(
+                        0.0,
+                        (absolute_time - transition_start) / outgoing_duration,
+                    ),
+                )
+                positions = np.arange(width, dtype=float)
+                if outgoing["direction"] == "left":
+                    boundary = (
+                        width
+                        + outgoing_feather / 2.0
+                        - (width + outgoing_feather) * progress
+                    )
+                    ramp = np.clip(
+                        (boundary - positions + outgoing_feather / 2.0)
+                        / outgoing_feather,
+                        0.0,
+                        1.0,
+                    )
+                else:
+                    boundary = (
+                        -outgoing_feather / 2.0
+                        + (width + outgoing_feather) * progress
+                    )
+                    ramp = np.clip(
+                        (positions - boundary + outgoing_feather / 2.0)
+                        / outgoing_feather,
+                        0.0,
+                        1.0,
+                    )
+                mask *= ramp[np.newaxis, :]
+            return mask
+
+        clip.mask = VideoClip(
+            frame_function=mask_frame,
+            is_mask=True,
+            duration=clip.duration,
+            has_constant_size=True,
+        )
+    return clip

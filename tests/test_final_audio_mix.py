@@ -42,6 +42,10 @@ def test_stop_cue_fixture_builds_final_video_audio() -> None:
         float(scene.get("pause_before_sec", 0.0))
         for scene in script["scenes"][1:]
     )
+    duration -= sum(
+        float(scene.get("transition_in", {}).get("duration_sec", 0.0))
+        for scene in script["scenes"][1:]
+    )
     narration = AudioClip(
         frame_function=lambda t: [0.0, 0.0],
         duration=duration,
@@ -67,6 +71,10 @@ def test_final_audio_mix_has_video_duration_and_three_layers() -> None:
     manifest = _manifest()
     duration = sum(float(item["duration_sec"]) for item in manifest["scenes"])
     duration += sum(float(scene.get("pause_before_sec", 0.0)) for scene in script["scenes"][1:])
+    duration -= sum(
+        float(scene.get("transition_in", {}).get("duration_sec", 0.0))
+        for scene in script["scenes"][1:]
+    )
     narration = AudioClip(
         frame_function=lambda t: [0.0, 0.0],
         duration=duration,
