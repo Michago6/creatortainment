@@ -20,6 +20,7 @@ from .audio.manifest import (
     read_manifest,
     write_manifest,
 )
+from . import config
 from .project_identity import (
     new_state,
     project_state_path,
@@ -37,7 +38,6 @@ from .provider_validation import validate_elevenlabs_values, validate_fal_models
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSETS_ROOT = REPO_ROOT / "assets"
 PROJECTS_ROOT = REPO_ROOT / "projects"
-ELEVENLABS_API_KEY_PATH = REPO_ROOT / "elevenlabs_api_key.txt"
 
 
 def scale_script_for_preview(script: dict) -> dict:
@@ -148,7 +148,6 @@ def validate_command(script_path: Path, asset_gen_info: bool = False) -> int:
         result.errors.extend(
             error
             for error in validate_elevenlabs_values(
-                ELEVENLABS_API_KEY_PATH,
                 script["project"]["tts_model"],
                 script["project"]["voice_id"],
             )
@@ -157,7 +156,7 @@ def validate_command(script_path: Path, asset_gen_info: bool = False) -> int:
         if missing_models_error:
             result.errors.append(missing_models_error)
         result.errors.extend(
-            validate_fal_models(REPO_ROOT / "fal_api_key.txt", effective_models)
+            validate_fal_models(effective_models)
         )
     if asset_gen_info:
         print("Asset generation plan:")
@@ -248,19 +247,6 @@ def storyboard_command(script_path: Path, output: Path | None) -> int:
     print(f"Project: {project_dir}")
     print(f"Storyboard: {destination}")
     return 0
-
-
-def read_api_key(path: Path) -> str:
-    if not path.is_file():
-        raise RuntimeError(
-            f"ElevenLabs API key file not found: {path}. "
-            "Create this file with the API key on its first non-empty line."
-        )
-    for line in path.read_text(encoding="utf-8").splitlines():
-        value = line.strip()
-        if value and not value.startswith("#"):
-            return value
-    raise RuntimeError(f"ElevenLabs API key file is empty: {path}")
 
 
 def repair_cached_manifest_timing(
@@ -394,7 +380,7 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
 
     project_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(script_path, project_dir / "script.json")
-    api_key = read_api_key(ELEVENLABS_API_KEY_PATH)
+    api_key = config.get_elevenlabs_api_key()
     result = ElevenLabsNarrationClient(
         api_key,
         voice_id=voice_id,

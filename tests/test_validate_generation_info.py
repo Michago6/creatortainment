@@ -82,7 +82,7 @@ def test_unused_invalid_default_does_not_need_provider_validation(
     monkeypatch.setattr(
         cli,
         "validate_fal_models",
-        lambda _path, models: calls.append(models) or [],
+        lambda models: calls.append(models) or [],
     )
     monkeypatch.setattr(cli, "load_script", lambda _path: model)
     assert cli.validate_command(Path("script.json")) == 0
@@ -155,7 +155,7 @@ def test_provider_validation_receives_only_required_models(monkeypatch) -> None:
     monkeypatch.setattr(
         cli,
         "validate_fal_models",
-        lambda _path, models: calls.append(models) or [],
+        lambda models: calls.append(models) or [],
     )
     assert cli.validate_command(Path("script.json")) == 0
     assert calls == [{"asset-override"}]
@@ -220,11 +220,10 @@ def test_voice_not_found_reports_account_hint(monkeypatch, tmp_path) -> None:
                 )
             )
 
-    monkeypatch.setattr(provider_validation, "_read_key", lambda *args: "test-key")
+    monkeypatch.setattr(provider_validation.config, "get_elevenlabs_api_key", lambda: "test-key")
     monkeypatch.setattr(elevenlabs.client, "ElevenLabs", FakeElevenLabs)
 
     errors = provider_validation.validate_elevenlabs_values(
-        tmp_path / "ignored.txt",
         "eleven_v3",
         "missing-voice",
     )
@@ -256,11 +255,10 @@ def test_other_voice_provider_errors_remain_distinct(monkeypatch, tmp_path) -> N
                 get=lambda _voice_id: (_ for _ in ()).throw(FakeProviderError())
             )
 
-    monkeypatch.setattr(provider_validation, "_read_key", lambda *args: "test-key")
+    monkeypatch.setattr(provider_validation.config, "get_elevenlabs_api_key", lambda: "test-key")
     monkeypatch.setattr(elevenlabs.client, "ElevenLabs", FakeElevenLabs)
 
     errors = provider_validation.validate_elevenlabs_values(
-        tmp_path / "ignored.txt",
         "eleven_v3",
         "restricted-voice",
     )

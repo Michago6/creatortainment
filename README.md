@@ -57,16 +57,26 @@ their own assets directory.
   scripts/pac-man-ghosts-were-never-smart.json
 ```
 
+## API keys / environment setup
+
+Create the local environment file from the committed template:
+
+```bash
+cp .env.example .env
+```
+
+Set `FAL_KEY` to your fal.ai API key and `ELEVENLABS_API_KEY` to your
+ElevenLabs API key in `.env`. Never commit `.env`; it is ignored by Git and
+must remain local.
+
+For ElevenLabs voice validation, the API key needs the `voices_read`
+permission. If you use a shared or community voice, add it to **My Voices**
+on the ElevenLabs Voices page before validating the script.
+
 Validation also performs read-only provider lookups for the ElevenLabs
 `project.tts_model` and `project.voice_id`, plus the effective fal.ai models
 required by generated assets. These checks verify metadata only; they do not
-generate audio or images and do not spend generation credits. Provider
-credentials are read from:
-
-```text
-elevenlabs_api_key.txt
-fal_api_key.txt
-```
+generate audio or images and do not spend generation credits.
 
 If validation reports a missing asset, add that file at the path declared in
 the script's `asset_registry`, then run validation again. Shared assets live
@@ -128,12 +138,6 @@ manifest:
 ```bash
 .venv/bin/python -m creatortainment align \
   scripts/pac-man-ghosts-were-never-smart.json
-```
-
-The ElevenLabs API key is read from:
-
-```text
-elevenlabs_api_key.txt
 ```
 
 The script's `project.voice_id` selects the voice. Narration files and their

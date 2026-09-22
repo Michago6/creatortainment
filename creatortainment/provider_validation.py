@@ -3,20 +3,11 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-
-def _read_key(path: Path, provider: str) -> str:
-    if not path.is_file():
-        raise RuntimeError(f"{provider} API key file not found: {path}")
-    for line in path.read_text(encoding="utf-8").splitlines():
-        value = line.strip()
-        if value and not value.startswith("#"):
-            return value
-    raise RuntimeError(f"{provider} API key file is empty: {path}")
+from . import config
 
 
 def _safe_error_detail(exc: Exception) -> str:
@@ -27,7 +18,9 @@ def _safe_error_detail(exc: Exception) -> str:
     status = getattr(exc, "status_code", getattr(exc, "status", None))
     if isinstance(status, int):
         return f"HTTP {status}"
-    if isinstance(exc, RuntimeError) and "API key file" in str(exc):
+    if isinstance(exc, RuntimeError) and (
+        "API key file" in str(exc) or "Missing required credential " in str(exc)
+    ):
         return str(exc)
     if isinstance(exc, RuntimeError):
         return "provider error"
@@ -61,12 +54,11 @@ def _voice_validation_error(voice_id: str, exc: Exception) -> str:
 
 
 def validate_elevenlabs_values(
-    api_key_path: Path,
     model_id: str,
     voice_id: str,
 ) -> list[str]:
     try:
-        api_key = _read_key(api_key_path, "ElevenLabs")
+        api_key = config.get_elevenlabs_api_key()
         from elevenlabs.client import ElevenLabs
 
         client = ElevenLabs(api_key=api_key)
@@ -87,11 +79,11 @@ def validate_elevenlabs_values(
         return [_safe_provider_error("ElevenLabs", exc)]
 
 
-def validate_fal_models(api_key_path: Path, model_ids: set[str]) -> list[str]:
+def validate_fal_models(model_ids: set[str]) -> list[str]:
     if not model_ids:
         return []
     try:
-        api_key = _read_key(api_key_path, "fal.ai")
+        api_key = config.get_fal_key()
     except Exception as exc:
         return [_safe_provider_error("fal.ai", exc)]
     errors: list[str] = []

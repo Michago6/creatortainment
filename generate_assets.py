@@ -44,6 +44,8 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from creatortainment import config
+
 MODEL_ID = "fal-ai/sana"
 API_URL = f"https://fal.run/{MODEL_ID}"
 
@@ -132,22 +134,6 @@ def generate_image(
         raise RuntimeError(
             f"Could not download the generated image: {exc.reason}"
         ) from exc
-
-
-def read_api_key(path: Path) -> str:
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        raise RuntimeError(
-            f"Could not read API key file {path}: {exc}"
-        ) from exc
-
-    for line in lines:
-        key = line.strip()
-        if key and not key.startswith("#"):
-            return key
-
-    raise RuntimeError(f"API key file {path} is empty.")
 
 
 def load_json(path: Path) -> dict:
@@ -307,12 +293,6 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--api-key-file",
-        type=Path,
-        default=Path("fal_api_key.txt"),
-        help="fal.ai API key file, relative to the current working directory.",
-    )
-    parser.add_argument(
         "--width",
         type=int,
         default=1080,
@@ -442,13 +422,7 @@ def main() -> int:
             print(f"[dry-run] {name}: {destination} ({state})")
         return 0
 
-    # Keep the same key-file convention as the rest of this repository:
-    # fal_api_key.txt at the repository root when running from the repo root.
-    api_key_path = args.api_key_file
-    if not api_key_path.is_absolute():
-        api_key_path = Path.cwd() / api_key_path
-
-    api_key = read_api_key(api_key_path).strip()
+    api_key = config.get_fal_key()
 
     generated = 0
     skipped = 0
