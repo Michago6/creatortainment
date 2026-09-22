@@ -6,61 +6,73 @@ import numpy as np
 import pytest
 from moviepy import ColorClip
 
-from creatortainment.render.moviepy_scene import (
-    _apply_scene_transition_effects,
-    _apply_push_transition,
-)
+from creatortainment.render.moviepy_scene import _apply_scene_transition_effects
 
 
-def test_soft_push_feathers_the_incoming_leading_edge() -> None:
-    """Soft push masks retain a real 0-to-1 gradient in clip-local space."""
-    resolution = (100, 60)
-    clip = ColorClip(resolution, color=(255, 0, 0), duration=1.0)
+def test_soft_push_keeps_incoming_scene_static_and_unmasked() -> None:
+    """The incoming soft-push scene is fully opaque and stationary."""
+    clip = ColorClip((100, 60), color=(255, 0, 0), duration=1.0)
     try:
-        soft = _apply_push_transition(
+        soft = _apply_scene_transition_effects(
             clip,
             {
-                "direction": "left",
-                "style": "soft",
+                "type": "push", "direction": "left", "style": "soft",
                 "duration_sec": 0.5,
-                "feather_frac": 0.2,
             },
-            0.5,
-            resolution,
+            None,
+            (100, 60),
         )
-        mask = soft.mask.get_frame(0.25)[30]
-        assert mask[0] == 0.0
-        assert 0.0 < mask[10] < 1.0
-        assert mask[20] == 1.0
-        assert np.allclose(mask, soft.mask.get_frame(0.0)[30])
+        assert soft.pos(0.0) == (0.0, 0.0)
+        assert soft.pos(0.25) == (0.0, 0.0)
+        assert soft.pos(0.5) == (0.0, 0.0)
+        assert soft.mask is None
     finally:
         clip.close()
 
 
-def test_soft_push_creates_an_overlap_band_for_the_fade() -> None:
-    """Soft push overlaps the outgoing edge instead of fading into empty canvas."""
+def test_soft_push_masks_only_outgoing_scene_with_moving_feather() -> None:
+    """The outgoing mask peels while the outgoing clip stays stationary."""
     clip = ColorClip((100, 60), color=(255, 0, 0), duration=1.0)
     try:
-        hard = _apply_scene_transition_effects(
-            clip,
-            {"type": "push", "direction": "right", "style": "hard", "duration_sec": 0.5},
-            None,
-            (100, 60),
-        )
         soft = _apply_scene_transition_effects(
             clip,
-            {
-                "type": "push",
-                "direction": "right",
-                "style": "soft",
-                "duration_sec": 0.5,
-                "feather_frac": 0.2,
-            },
             None,
+            {
+                "type": "push", "direction": "left", "style": "soft",
+                "duration_sec": 0.5,
+            },
             (100, 60),
         )
-        assert hard.pos(0.25)[0] == -50.0
-        assert soft.pos(0.25)[0] == -25.0
+        for time in (0.0, 0.25, 0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 1.0):
+            assert soft.pos(time) == pytest.approx((0.0, 0.0))
+        start = soft.mask.get_frame(0.5)[30]
+        middle = soft.mask.get_frame(0.75)[30]
+        end = soft.mask.get_frame(1.0)[30]
+        assert np.allclose(start, 1.0)
+        assert middle[0] == pytest.approx(1.0)
+        assert middle[99] == pytest.approx(0.0)
+        assert 0.0 < middle[50] < 1.0
+        assert np.allclose(end, 0.0)
+    finally:
+        clip.close()
+
+
+def test_soft_push_right_direction_mirrors_the_outgoing_mask() -> None:
+    clip = ColorClip((100, 60), color=(255, 0, 0), duration=1.0)
+    try:
+        soft = _apply_scene_transition_effects(
+            clip,
+            None,
+            {
+                "type": "push", "direction": "right", "style": "soft",
+                "duration_sec": 0.5,
+            },
+            (100, 60),
+        )
+        middle = soft.mask.get_frame(0.75)[30]
+        assert middle[0] == pytest.approx(0.0)
+        assert middle[99] == pytest.approx(1.0)
+        assert 0.0 < middle[50] < 1.0
     finally:
         clip.close()
 
@@ -69,14 +81,44 @@ def test_hard_push_has_no_feather_mask() -> None:
     """Hard push remains a plain slide without an incoming alpha mask."""
     clip = ColorClip((100, 60), color=(255, 0, 0), duration=1.0)
     try:
-        hard = _apply_push_transition(
+        hard = _apply_scene_transition_effects(
             clip,
-            {"direction": "left", "style": "hard", "duration_sec": 0.5},
-            0.5,
+            {
+                "type": "push",
+                "direction": "left",
+                "style": "hard",
+                "duration_sec": 0.5,
+            },
+            None,
             (100, 60),
         )
         assert hard.mask is None
-        assert hard.pos(0.0) != hard.pos(0.5)
+        positions = [hard.pos(time) for time in (0.0, 0.1, 0.25, 0.4, 0.5)]
+        assert positions[0] == pytest.approx((100.0, 0.0))
+        assert positions[-1] == pytest.approx((0.0, 0.0))
+        assert len(set(positions)) > 2
+    finally:
+        clip.close()
+
+
+def test_hard_outgoing_push_still_moves_offscreen() -> None:
+    clip = ColorClip((100, 60), color=(255, 0, 0), duration=1.0)
+    try:
+        hard = _apply_scene_transition_effects(
+            clip,
+            None,
+            {
+                "type": "push",
+                "direction": "left",
+                "style": "hard",
+                "duration_sec": 0.5,
+            },
+            (100, 60),
+        )
+        positions = [hard.pos(time) for time in (0.5, 0.6, 0.75, 0.9, 1.0)]
+        assert positions[0] == pytest.approx((0.0, 0.0))
+        assert positions[-1] == pytest.approx((-100.0, 0.0))
+        assert len(set(positions)) > 2
     finally:
         clip.close()
 
