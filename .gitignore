@@ -11,3 +11,7 @@ projects/
 archive/
 .pytest_cache/
 scripts/
+.zed/
+.vscode/
+.env/
+*.env/

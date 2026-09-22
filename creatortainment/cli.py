@@ -7,6 +7,7 @@ import copy
 import json
 import shutil
 import sys
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,7 +30,8 @@ from .project_identity import (
 )
 from .render.moviepy_scene import build_full_video_clip
 from .render.mock import render_storyboard
-from .schema.validate import load_script, validate_script
+from .schema.validate import asset_generation_plans, load_script, validate_script
+from .provider_validation import validate_elevenlabs_values, validate_fal_models
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -112,15 +114,66 @@ def project_slug(title: str) -> str:
     return slugify(title)
 
 
-def validate_command(script_path: Path) -> int:
+def _group_missing_generation_models(plans) -> str | None:
+    counts = Counter(
+        plan.generation_method
+        for plan in plans
+        if plan.effective_model is None
+    )
+    if not counts:
+        return None
+    lines = ["Asset generation:"]
+    lines.extend(
+        f"- No model configured for {method} ({count} assets)"
+        for method, count in counts.items()
+    )
+    return "\n".join(lines)
+
+
+def _print_validation_error(error: str) -> None:
+    if error.startswith("Asset generation:\n"):
+        print(error, file=sys.stderr)
+    else:
+        print(f"- {error}", file=sys.stderr)
+
+
+def validate_command(script_path: Path, asset_gen_info: bool = False) -> int:
     script = load_script(script_path)
     result = validate_script(script, ASSETS_ROOT)
+    plans = asset_generation_plans(script)
+    effective_models = {
+        plan.effective_model for plan in plans if plan.effective_model is not None
+    }
+    if not result.errors:
+        result.errors.extend(
+            error
+            for error in validate_elevenlabs_values(
+                ELEVENLABS_API_KEY_PATH,
+                script["project"]["tts_model"],
+                script["project"]["voice_id"],
+            )
+        )
+        missing_models_error = _group_missing_generation_models(plans)
+        if missing_models_error:
+            result.errors.append(missing_models_error)
+        result.errors.extend(
+            validate_fal_models(REPO_ROOT / "fal_api_key.txt", effective_models)
+        )
+    if asset_gen_info:
+        print("Asset generation plan:")
+        for plan in plans:
+            model = plan.effective_model or "<unresolved>"
+            source = f", source_asset={plan.source_asset}" if plan.source_asset else ""
+            print(
+                f"- {plan.asset_key}: method={plan.generation_method}, "
+                f"model={model}{source}"
+            )
     if result.valid:
         print(f"Valid: {script_path}")
         return 0
     print(f"Invalid: {script_path}", file=sys.stderr)
     for error in result.errors:
-        print(f"- {error}", file=sys.stderr)
+        _print_validation_error(error)
     return 1
 
 
@@ -386,6 +439,11 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     validate = commands.add_parser("validate", help="Validate a script and all shared assets.")
     validate.add_argument("script", type=Path)
+    validate.add_argument(
+        "--asset-gen-info",
+        action="store_true",
+        help="Print effective generation models for generated assets.",
+    )
     render = commands.add_parser("render", help="Render the script to an MP4 video.")
     render.add_argument("script", type=Path)
     render.add_argument("--out", type=Path, help="Output MP4 path relative to the project.")
@@ -410,7 +468,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "validate":
-        return validate_command(args.script)
+        return validate_command(args.script, args.asset_gen_info)
     if args.command == "render":
         return render_command(args.script, args.out, args.preview)
     if args.command == "storyboard":

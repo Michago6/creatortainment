@@ -30,7 +30,7 @@
     "duck_to_narration_pct": "This is the ONLY control over background music loudness — bg_music has no volume field. It's a LOUDNESS-relative ratio: narration's integrated loudness and each music asset's integrated loudness are measured once, and the music is gained so its playback loudness sits at this fraction of the narration's loudness (0.4 = roughly -8 dB relative to narration). Once a bg_music cue starts, this gain applies CONTINUOUSLY through narration AND through pauses between scenes, until fade_in_sec ramps toward a new cue or a later bg_music change event. There is no separate 'baseline' level for pauses. Settable at project.duck_to_narration_pct (video-wide default) and overridable per-scene via scene.duck_to_narration_pct (null by default = inherit the project value)."
   },
   "project": {
-    "title": "pac-man-ghosts-were-never-smart",
+    "title": "pac_man_ghosts_were_never_smart",
     "date": "2026-09-20",
     "tts_model": "eleven_v3",
     "voice_id": "fBD19tfE58bkETeiwUoC",

@@ -23,6 +23,32 @@ class ValidationResult:
         return not self.errors
 
 
+@dataclass(frozen=True)
+class AssetGenerationPlan:
+    asset_key: str
+    generation_method: str
+    effective_model: str | None
+    source_asset: str | None
+
+
+def asset_generation_plans(script: ScriptModel) -> list[AssetGenerationPlan]:
+    defaults = script.project.generation_defaults
+    return [
+        AssetGenerationPlan(
+            asset_key=key,
+            generation_method=entry.generate.generation_method,
+            effective_model=(
+                entry.generate.model
+                if entry.generate.model is not None
+                else defaults.get(entry.generate.generation_method)
+            ),
+            source_asset=entry.generate.source_asset,
+        )
+        for key, entry in script.asset_registry.items()
+        if entry.generate is not None
+    ]
+
+
 def load_script(path: Path) -> ScriptModel:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))

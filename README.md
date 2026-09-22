@@ -57,6 +57,17 @@ their own assets directory.
   scripts/pac-man-ghosts-were-never-smart.json
 ```
 
+Validation also performs read-only provider lookups for the ElevenLabs
+`project.tts_model` and `project.voice_id`, plus the effective fal.ai models
+required by generated assets. These checks verify metadata only; they do not
+generate audio or images and do not spend generation credits. Provider
+credentials are read from:
+
+```text
+elevenlabs_api_key.txt
+fal_api_key.txt
+```
+
 If validation reports a missing asset, add that file at the path declared in
 the script's `asset_registry`, then run validation again. Shared assets live
 once at repository level and can be reused by every project.
@@ -253,6 +264,35 @@ images and audio in `assets/`; generated project files belong in
 Validates the typed script model, referenced assets, word indexes, element
 keyframes, caption values, music cues, and transition shapes.
 
+For generated assets, the effective fal.ai model is resolved from the
+asset-level `generate.model` first, then
+`project.generation_defaults[generation_method]`. Only generation methods
+actually used by generated assets require a valid model. If several assets
+share the same missing model configuration, validation groups the errors by
+method instead of printing one error per asset:
+
+```text
+Asset generation:
+- No model configured for image_to_image (11 assets)
+- No model configured for text_to_image (17 assets)
+```
+
+Use `--asset-gen-info` to print the detailed generation plan for every
+generated asset, including its asset key, generation method, effective model,
+and source asset when applicable:
+
+```bash
+.venv/bin/python -m creatortainment validate \
+  <script.json> \
+  --asset-gen-info
+```
+
+Static assets are omitted from this report. An unresolved effective model is
+shown as `<unresolved>`, even when validation fails, so the report can be
+used to identify the missing configuration. Provider failures are reported
+with concise status or configuration details; raw HTTP headers, trace IDs,
+and full API response bodies are not printed.
+
 ### Align
 
 ```bash
@@ -286,11 +326,13 @@ For command help:
 .venv/bin/python -m creatortainment validate --help
 .venv/bin/python -m creatortainment align --help
 .venv/bin/python -m creatortainment render --help
+.venv/bin/python -m creatortainment storyboard --help
 ```
 
 ## Running tests
 
-The test suite is offline and does not call ElevenLabs or spend API credits:
+The test suite is offline and mocks provider lookups, so it does not call
+ElevenLabs or fal.ai or spend API credits:
 
 ```bash
 .venv/bin/python -m pytest

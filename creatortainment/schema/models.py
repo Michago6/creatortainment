@@ -154,10 +154,10 @@ class AssetGenerationModel(ScriptModelBase):
         "text_to_audio",
         "audio_to_audio",
     ]
-    model: str | None
+    model: str | None = None
     description: str = Field(min_length=1)
-    source_asset: str | None
-    transparent_background: bool | None
+    source_asset: str | None = None
+    transparent_background: bool | None = None
 
 
 class AssetRegistryEntryModel(ScriptModelBase):
@@ -173,6 +173,10 @@ class ProjectModel(ScriptModelBase):
     fps: int
     tts_model: str = Field(default="eleven_flash_v2_5", min_length=1)
     voice_id: str = Field(min_length=1)
+    generation_defaults: dict[
+        Literal["text_to_image", "image_to_image", "text_to_audio", "audio_to_audio"],
+        str | None,
+    ] = Field(default_factory=dict)
     duck_to_narration_pct: float = Field(default=0.3, gt=0.0, le=1.0)
     caption_style: CaptionStyleModel | None = None
 
