@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .models import ScriptModel
+from .models import AssetRegistryEntryModel, ScriptModel
 from .tokenize import tokenize
 
 
@@ -49,11 +49,16 @@ def _index_error(path: str, index: Any, word_count: int) -> str | None:
 
 def _asset_path(assets_root: Path, relative_path: str) -> Path:
     candidate = Path(relative_path)
-    if candidate.is_absolute() or ".." in candidate.parts:
-        raise ValueError("asset_registry paths must stay inside the shared assets folder")
-    if candidate.parts and candidate.parts[0] == "assets":
-        candidate = candidate.relative_to("assets")
-    return assets_root / candidate
+    if (
+        candidate.is_absolute()
+        or ".." in candidate.parts
+        or len(candidate.parts) < 2
+        or candidate.parts[0] != "assets"
+    ):
+        raise ValueError(
+            "asset_registry paths must be project-relative and begin with 'assets/'"
+        )
+    return assets_root.parent / candidate
 
 
 def validate_script(
@@ -70,20 +75,68 @@ def validate_script(
             errors=[error["msg"] for error in exc.errors()],
         )
 
-    for key, relative_path in model.asset_registry.items():
+    for key, entry in model.asset_registry.items():
         if not isinstance(key, str) or not key:
             errors.append("asset_registry keys must be non-empty strings.")
             continue
-        if not isinstance(relative_path, str) or not relative_path.strip():
-            errors.append(f"asset_registry[{key!r}] must be a non-empty relative path.")
+        if not isinstance(entry, AssetRegistryEntryModel):
+            errors.append(f"asset_registry[{key!r}] must be an object with a path.")
             continue
+        relative_path = entry.path
         try:
             path = _asset_path(assets_root, relative_path)
         except ValueError as exc:
             errors.append(f"asset_registry[{key!r}] {exc}.")
             continue
-        if not path.is_file():
-            errors.append(f"asset_registry[{key!r}] file does not exist: {path}")
+        generation = entry.generate
+        if generation is None and not path.is_file():
+            errors.append(
+                f"asset_registry[{key!r}] file does not exist: {path}; "
+                "the asset has no generation metadata and therefore needs a "
+                "complete generate block if it is intended to be generated."
+            )
+        if generation is None:
+            continue
+        if generation.asset_type in {"background", "sprite"}:
+            if generation.transparent_background is None:
+                errors.append(
+                    f"asset_registry[{key!r}].generate.transparent_background "
+                    "must be true or false for image assets."
+                )
+        elif generation.transparent_background is not None:
+            errors.append(
+                f"asset_registry[{key!r}].generate.transparent_background "
+                "must be null for audio assets."
+            )
+        if generation.generation_method in {"text_to_image", "text_to_audio"}:
+            if generation.source_asset is not None:
+                errors.append(
+                    f"asset_registry[{key!r}].generate.source_asset must be null "
+                    f"for {generation.generation_method}."
+                )
+        else:
+            source = generation.source_asset
+            if source is None:
+                errors.append(
+                    f"asset_registry[{key!r}].generate.source_asset is required "
+                    f"for {generation.generation_method}."
+                )
+            else:
+                source_path = Path(source)
+                if (
+                    source_path.is_absolute()
+                    or "/" in source
+                    or "\\" in source
+                ):
+                    errors.append(
+                        f"asset_registry[{key!r}].generate.source_asset must be "
+                        "an asset_registry key, not a filesystem path."
+                    )
+                elif source not in model.asset_registry:
+                    errors.append(
+                        f"asset_registry[{key!r}].generate.source_asset={source!r} "
+                        "is not declared in asset_registry."
+                    )
 
     for scene_number, scene in enumerate(model.scenes, start=1):
         prefix = f"scenes[{scene_number - 1}]"

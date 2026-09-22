@@ -146,6 +146,25 @@ TransitionInModel = Annotated[
 ]
 
 
+class AssetGenerationModel(ScriptModelBase):
+    asset_type: Literal["background", "sprite", "sfx", "music"]
+    generation_method: Literal[
+        "text_to_image",
+        "image_to_image",
+        "text_to_audio",
+        "audio_to_audio",
+    ]
+    model: str | None
+    description: str = Field(min_length=1)
+    source_asset: str | None
+    transparent_background: bool | None
+
+
+class AssetRegistryEntryModel(ScriptModelBase):
+    path: str = Field(min_length=1)
+    generate: AssetGenerationModel | None = None
+
+
 class ProjectModel(ScriptModelBase):
     title: str
     date: str | None = None
@@ -175,7 +194,7 @@ class SceneModel(ScriptModelBase):
 class ScriptModel(ScriptModelBase):
     conventions: dict[str, Any] = Field(default_factory=dict, alias="_conventions")
     project: ProjectModel
-    asset_registry: dict[str, str]
+    asset_registry: dict[str, AssetRegistryEntryModel]
     scenes: list[SceneModel] = Field(min_length=1)
 
     @model_validator(mode="before")

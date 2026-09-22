@@ -37,6 +37,20 @@ python3 -m venv .venv
 Every asset referenced by `asset_registry` must exist under `assets/`.
 Validation catches missing files, invalid word indexes, invalid element
 keyframes, invalid transitions, and other script errors before rendering.
+Registry entries use an object with a project-relative `assets/...` path:
+
+```json
+"bg_studio": {
+  "path": "assets/backgrounds/default_studio.jpg",
+  "generate": null
+}
+```
+
+The optional `generate` field may contain complete generation metadata for a
+pending asset. A missing `generate` field is equivalent to `generate: null`,
+so the file must already exist. All generated and reusable assets stay in the
+single repository-level `assets/` directory; project folders never contain
+their own assets directory.
 
 ```bash
 .venv/bin/python -m creatortainment validate \

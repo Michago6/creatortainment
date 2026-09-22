@@ -104,3 +104,234 @@ def test_first_scene_transition_must_be_null() -> None:
     }
     with pytest.raises(ValidationError, match="transition_in"):
         ScriptModel.model_validate(script)
+
+
+def _asset_script(entry: object) -> dict:
+    return {
+        "project": {
+            "title": "Asset validation",
+            "aspect_ratio": "9:16",
+            "resolution": [1080, 1920],
+            "fps": 30,
+            "voice_id": "voice",
+        },
+        "asset_registry": {"asset": entry},
+        "scenes": [
+            {
+                "id": "scene_1",
+                "bg": "asset",
+                "narration_text": "Hello world",
+                "transition_in": None,
+            }
+        ],
+    }
+
+
+def _generation(
+    *,
+    asset_type: str = "background",
+    generation_method: str = "text_to_image",
+    source_asset: str | None = None,
+    transparent_background: bool | None = False,
+) -> dict:
+    return {
+        "asset_type": asset_type,
+        "generation_method": generation_method,
+        "model": None,
+        "description": "A generated test asset",
+        "source_asset": source_asset,
+        "transparent_background": transparent_background,
+    }
+
+
+def test_asset_registry_requires_object_entries() -> None:
+    with pytest.raises(ValidationError):
+        ScriptModel.model_validate(
+            _asset_script("assets/backgrounds/example.jpg")
+        )
+
+
+def test_existing_asset_accepts_null_or_missing_generate(tmp_path: Path) -> None:
+    asset = tmp_path / "assets" / "backgrounds" / "example.jpg"
+    asset.parent.mkdir(parents=True)
+    asset.write_bytes(b"asset")
+
+    for entry in (
+        {"path": "assets/backgrounds/example.jpg", "generate": None},
+        {"path": "assets/backgrounds/example.jpg"},
+    ):
+        result = validate_script(_asset_script(entry), tmp_path / "assets")
+        assert result.valid, result.errors
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"path": "assets/backgrounds/missing.jpg", "generate": None},
+        {"path": "assets/backgrounds/missing.jpg"},
+    ],
+)
+def test_missing_asset_without_generation_is_invalid(
+    entry: dict,
+    tmp_path: Path,
+) -> None:
+    result = validate_script(_asset_script(entry), tmp_path / "assets")
+    assert not result.valid
+    assert "file does not exist" in result.errors[0]
+    assert "generation metadata" in result.errors[0]
+
+
+def test_missing_or_existing_asset_with_valid_generation_is_valid(tmp_path: Path) -> None:
+    entry = {
+        "path": "assets/backgrounds/generated.jpg",
+        "generate": _generation(),
+    }
+    missing_result = validate_script(_asset_script(entry), tmp_path / "assets")
+    assert missing_result.valid, missing_result.errors
+
+    path = tmp_path / "assets" / "backgrounds" / "generated.jpg"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"asset")
+    existing_result = validate_script(_asset_script(entry), tmp_path / "assets")
+    assert existing_result.valid, existing_result.errors
+
+
+@pytest.mark.parametrize(
+    "generation, expected",
+    [
+        ({}, "Field required"),
+        (_generation(asset_type="invalid"), "Input should be"),
+        (_generation(generation_method="invalid"), "Input should be"),
+        (
+            _generation(generation_method="text_to_image", source_asset="other"),
+            "source_asset must be null",
+        ),
+        (
+            _generation(generation_method="text_to_audio", source_asset="other"),
+            "source_asset must be null",
+        ),
+        (
+            _generation(generation_method="image_to_image"),
+            "source_asset is required",
+        ),
+        (
+            _generation(generation_method="audio_to_audio"),
+            "source_asset is required",
+        ),
+        (
+            _generation(
+                generation_method="image_to_image",
+                source_asset="assets/reference.png",
+            ),
+            "filesystem path",
+        ),
+        (
+            _generation(
+                generation_method="image_to_image",
+                source_asset="missing",
+            ),
+            "not declared",
+        ),
+        (
+            _generation(asset_type="background", transparent_background=None),
+            "must be true or false",
+        ),
+        (
+            _generation(asset_type="music", transparent_background=False),
+            "must be null",
+        ),
+    ],
+)
+def test_generation_metadata_rules(
+    generation: dict,
+    expected: str,
+    tmp_path: Path,
+) -> None:
+    entry = {
+        "path": "assets/audio/generated.mp3",
+        "generate": generation,
+    }
+    result = validate_script(_asset_script(entry), tmp_path / "assets")
+    if generation == {}:
+        with pytest.raises(ValidationError):
+            ScriptModel.model_validate(_asset_script(entry))
+        return
+    assert not result.valid
+    assert any(expected in error for error in result.errors)
+
+
+def test_valid_source_asset_registry_keys_and_audio_transparency() -> None:
+    script = _asset_script(
+        {
+            "path": "assets/audio/generated.mp3",
+            "generate": _generation(
+                asset_type="music",
+                generation_method="audio_to_audio",
+                source_asset="reference",
+                transparent_background=None,
+            ),
+        }
+    )
+    script["asset_registry"]["reference"] = {
+        "path": "assets/audio/reference.mp3",
+        "generate": None,
+    }
+    result = validate_script(script, Path("/tmp/nonexistent-assets"))
+    assert not result.valid
+    assert all("source_asset" not in error for error in result.errors)
+
+
+@pytest.mark.parametrize(
+    "asset_type,generation_method,transparent_background",
+    [
+        ("background", "image_to_image", False),
+        ("sprite", "image_to_image", True),
+        ("sfx", "audio_to_audio", None),
+        ("music", "audio_to_audio", None),
+    ],
+)
+def test_valid_transformation_source_registry_keys(
+    asset_type: str,
+    generation_method: str,
+    transparent_background: bool | None,
+) -> None:
+    script = _asset_script(
+        {
+            "path": f"assets/generated/{asset_type}",
+            "generate": _generation(
+                asset_type=asset_type,
+                generation_method=generation_method,
+                source_asset="reference",
+                transparent_background=transparent_background,
+            ),
+        }
+    )
+    script["asset_registry"]["reference"] = {
+        "path": "assets/reference/source",
+        "generate": _generation(
+            asset_type=asset_type,
+            generation_method="text_to_image"
+            if asset_type in {"background", "sprite"}
+            else "text_to_audio",
+            transparent_background=False
+            if asset_type in {"background", "sprite"}
+            else None,
+        ),
+    }
+    result = validate_script(script, Path("/tmp/nonexistent-assets"))
+    assert result.valid, result.errors
+
+
+def test_asset_paths_resolve_from_shared_assets_root_not_script_directory(
+    tmp_path: Path,
+) -> None:
+    shared = tmp_path / "assets" / "backgrounds" / "scene.jpg"
+    shared.parent.mkdir(parents=True)
+    shared.write_bytes(b"asset")
+    script_dir = tmp_path / "scripts"
+    script_dir.mkdir()
+    result = validate_script(
+        _asset_script({"path": "assets/backgrounds/scene.jpg"}),
+        tmp_path / "assets",
+    )
+    assert result.valid, result.errors

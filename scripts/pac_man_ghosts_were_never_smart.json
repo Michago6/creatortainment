@@ -56,41 +56,146 @@
     }
   },
   "asset_registry": {
-    "bg_studio_default": "assets/backgrounds/default_studio.jpg",
-    "bg_cyber": "assets/backgrounds/cyberpunk_room.jpg",
-    "bg_white": "assets/backgrounds/plain_white.jpg",
-    "bg_arcade_retro": "assets/backgrounds/retro_arcade_1980s.jpg",
-    "bg_arcade_closeup": "assets/backgrounds/retro_arcade_closeup.jpg",
-    "mrmouse_relaxed": "assets/sprites/mrmouse_relaxed.png",
-    "mrmouse_pointing": "assets/sprites/mrmouse_pointing.png",
-    "mrmouse_laptop": "assets/sprites/mrmouse_laptop.png",
-    "mrmouse_excited": "assets/sprites/mrmouse_excited.png",
-    "img_gpu_diagram": "assets/images/gpu_core_diagram.jpg",
-    "img_core_grid": "assets/images/gpu_core_grid.jpg",
-    "img_pacman_gameplay": "assets/images/pacman_classic_gameplay.jpg",
-    "img_pacman_puckman": "assets/images/pacman_puck_man_vs_pac_man.jpg",
-    "img_chase_scatter_diagram": "assets/images/pacman_chase_scatter_diagram.png",
-    "img_state_machine": "assets/images/pacman_state_machine.png",
-    "img_blinky_target": "assets/images/pacman_blinky_target.png",
-    "img_pinky_target": "assets/images/pacman_pinky_target.png",
-    "img_inky_vector": "assets/images/pacman_inky_vector.png",
-    "img_clyde_behavior": "assets/images/pacman_clyde_behavior.png",
-    "img_killscreen": "assets/images/pacman_level_256_killscreen.jpg",
-    "img_level_counter_byte": "assets/images/pacman_level_counter_byte.png",
-    "img_byte_overflow": "assets/images/pacman_byte_overflow.png",
-    "img_corrupted_fruit": "assets/images/pacman_corrupted_fruit.png",
-    "img_corrupted_maze": "assets/images/pacman_corrupted_maze.jpg",
-    "img_arcade_crowd": "assets/images/pacman_arcade_crowd.jpg",
-    "img_killscreen_full": "assets/images/pacman_level_256_full.jpg",
-    "sfx_pop": "assets/audio/sfx/pop.mp3",
-    "sfx_whoosh": "assets/audio/sfx/whoosh.mp3",
-    "sfx_arcade_beep": "assets/audio/sfx/arcade_beep.mp3",
-    "sfx_glitch": "assets/audio/sfx/digital_glitch.mp3",
-    "sfx_error": "assets/audio/sfx/retro_error.mp3",
-    "sfx_level_up": "assets/audio/sfx/arcade_level_transition.mp3",
-    "sfx_reveal": "assets/audio/sfx/dramatic_reveal.mp3",
-    "music_main": "assets/audio/monkeys_spinning_monkeys.mp3",
-    "music_retro_arcade": "assets/audio/retro_arcade_mystery.mp3"
+    "bg_studio_default": {
+      "path": "assets/backgrounds/default_studio.jpg",
+      "generate": null
+    },
+    "bg_cyber": {
+      "path": "assets/backgrounds/cyberpunk_room.jpg",
+      "generate": null
+    },
+    "bg_white": {
+      "path": "assets/backgrounds/plain_white.jpg",
+      "generate": null
+    },
+    "bg_arcade_retro": {
+      "path": "assets/backgrounds/retro_arcade_1980s.jpg",
+      "generate": null
+    },
+    "bg_arcade_closeup": {
+      "path": "assets/backgrounds/retro_arcade_closeup.jpg",
+      "generate": null
+    },
+    "mrmouse_relaxed": {
+      "path": "assets/sprites/mrmouse_relaxed.png",
+      "generate": null
+    },
+    "mrmouse_pointing": {
+      "path": "assets/sprites/mrmouse_pointing.png",
+      "generate": null
+    },
+    "mrmouse_laptop": {
+      "path": "assets/sprites/mrmouse_laptop.png",
+      "generate": null
+    },
+    "mrmouse_excited": {
+      "path": "assets/sprites/mrmouse_excited.png",
+      "generate": null
+    },
+    "img_gpu_diagram": {
+      "path": "assets/images/gpu_core_diagram.jpg",
+      "generate": null
+    },
+    "img_core_grid": {
+      "path": "assets/images/gpu_core_grid.jpg",
+      "generate": null
+    },
+    "img_pacman_gameplay": {
+      "path": "assets/images/pacman_classic_gameplay.jpg",
+      "generate": null
+    },
+    "img_pacman_puckman": {
+      "path": "assets/images/pacman_puck_man_vs_pac_man.jpg",
+      "generate": null
+    },
+    "img_chase_scatter_diagram": {
+      "path": "assets/images/pacman_chase_scatter_diagram.png",
+      "generate": null
+    },
+    "img_state_machine": {
+      "path": "assets/images/pacman_state_machine.png",
+      "generate": null
+    },
+    "img_blinky_target": {
+      "path": "assets/images/pacman_blinky_target.png",
+      "generate": null
+    },
+    "img_pinky_target": {
+      "path": "assets/images/pacman_pinky_target.png",
+      "generate": null
+    },
+    "img_inky_vector": {
+      "path": "assets/images/pacman_inky_vector.png",
+      "generate": null
+    },
+    "img_clyde_behavior": {
+      "path": "assets/images/pacman_clyde_behavior.png",
+      "generate": null
+    },
+    "img_killscreen": {
+      "path": "assets/images/pacman_level_256_killscreen.jpg",
+      "generate": null
+    },
+    "img_level_counter_byte": {
+      "path": "assets/images/pacman_level_counter_byte.png",
+      "generate": null
+    },
+    "img_byte_overflow": {
+      "path": "assets/images/pacman_byte_overflow.png",
+      "generate": null
+    },
+    "img_corrupted_fruit": {
+      "path": "assets/images/pacman_corrupted_fruit.png",
+      "generate": null
+    },
+    "img_corrupted_maze": {
+      "path": "assets/images/pacman_corrupted_maze.jpg",
+      "generate": null
+    },
+    "img_arcade_crowd": {
+      "path": "assets/images/pacman_arcade_crowd.jpg",
+      "generate": null
+    },
+    "img_killscreen_full": {
+      "path": "assets/images/pacman_level_256_full.jpg",
+      "generate": null
+    },
+    "sfx_pop": {
+      "path": "assets/audio/sfx/pop.mp3",
+      "generate": null
+    },
+    "sfx_whoosh": {
+      "path": "assets/audio/sfx/whoosh.mp3",
+      "generate": null
+    },
+    "sfx_arcade_beep": {
+      "path": "assets/audio/sfx/arcade_beep.mp3",
+      "generate": null
+    },
+    "sfx_glitch": {
+      "path": "assets/audio/sfx/digital_glitch.mp3",
+      "generate": null
+    },
+    "sfx_error": {
+      "path": "assets/audio/sfx/retro_error.mp3",
+      "generate": null
+    },
+    "sfx_level_up": {
+      "path": "assets/audio/sfx/arcade_level_transition.mp3",
+      "generate": null
+    },
+    "sfx_reveal": {
+      "path": "assets/audio/sfx/dramatic_reveal.mp3",
+      "generate": null
+    },
+    "music_main": {
+      "path": "assets/audio/monkeys_spinning_monkeys.mp3",
+      "generate": null
+    },
+    "music_retro_arcade": {
+      "path": "assets/audio/retro_arcade_mystery.mp3",
+      "generate": null
+    }
   },
   "scenes": [
     {

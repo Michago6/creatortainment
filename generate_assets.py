@@ -28,8 +28,9 @@ If the prompt manifest is separate, pass:
     python scripts/generate_assets.py scripts/pac-man-ghosts-were-never-smart.json \
         --prompts scripts/pacman_image_prompts.json
 
-Paths are resolved relative to the VIDEO SCRIPT JSON's directory by default.
-Use --project-root to resolve paths relative to the repository/project root instead.
+Asset paths are resolved relative to the shared repository root. Use
+--project-root to select that repository root when invoking this utility
+outside the repository directory.
 """
 
 from __future__ import annotations
@@ -245,12 +246,16 @@ def load_script_assets(path: Path) -> dict[str, str]:
         )
 
     assets: dict[str, str] = {}
-    for name, asset_path in registry.items():
-        if not isinstance(name, str) or not isinstance(asset_path, str):
+    for name, entry in registry.items():
+        if (
+            not isinstance(name, str)
+            or not isinstance(entry, dict)
+            or not isinstance(entry.get("path"), str)
+        ):
             raise RuntimeError(
-                f"{path}: asset_registry must map names to path strings."
+                f"{path}: asset_registry must map names to objects with path strings."
             )
-        assets[name] = asset_path
+        assets[name] = entry["path"]
 
     return assets
 
@@ -412,7 +417,7 @@ def main() -> int:
             )
             continue
 
-        destination = Path(registry[name])
+        destination = Path(registry[name]["path"])
         if not destination.is_absolute():
             destination = root / destination
 

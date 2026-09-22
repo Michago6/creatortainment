@@ -173,7 +173,12 @@ block.
 {
   "_conventions": { ...copy the canonical block verbatim, see below... },
   "project": { ... },
-  "asset_registry": { ...copy exactly what you were given, unchanged... },
+  "asset_registry": {
+    "asset_key": {
+      "path": "assets/category/file.ext",
+      "generate": null
+    }
+  },
   "scenes": [ ... ]
 }
 ```

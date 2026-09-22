@@ -10,7 +10,7 @@
     "caption_style_inheritance": "scene.caption_style is null by default and inherits project.caption_style. If set, it is MERGED over the project default (only override the fields you're changing), not replaced wholesale.",
     "asset_refs": "Every asset field (bg, element.asset, sfx.asset, bg_music.asset) must be a key in asset_registry. No raw file paths in scenes, no 'default' sentinel value.",
     "transition_in_null": "null means hard cut into this scene. The first scene of the video should always be null.",
-    "transitions": "transition_in supports four shapes beyond null (hard cut): { \"type\": \"crossfade\", \"duration_sec\" } \u2014 standard dissolve between outgoing and incoming. { \"type\": \"zoom_out\", \"duration_sec\", \"zoom_scale\" (optional, default 1.3) } \u2014 incoming scene starts at zoom_scale and scales down to 1.0 over duration_sec while the outgoing scene fades out underneath. { \"type\": \"push\", \"direction\": \"left\"|\"right\", \"style\": \"hard\"|\"soft\", \"duration_sec\", \"feather_frac\" (optional, soft only, default 0.03) } \u2014 outgoing scene slides off-screen in direction, incoming slides in from the opposite edge; \"hard\" has a sharp leading edge, \"soft\" feathers/blurs it over feather_frac of canvas width. EVERY transition type is an OVERLAP, not an addition \u2014 duration_sec is consumed from the tail of the outgoing scene's clip and the head of the incoming scene's clip, so total video duration decreases slightly whenever a transition is used. This is the OPPOSITE of pause_before_sec, which adds time. duration_sec alone controls transition speed for every type; hard/soft is purely an edge-treatment choice, not a speed choice.",
+    "transitions": "transition_in supports four shapes beyond null (hard cut): { \"type\": \"crossfade\", \"duration_sec\" } — standard dissolve between outgoing and incoming. { \"type\": \"zoom_out\", \"duration_sec\", \"zoom_scale\" (optional, default 1.3) } — incoming scene starts at zoom_scale and scales down to 1.0 over duration_sec while the outgoing scene fades out underneath. { \"type\": \"push\", \"direction\": \"left\"|\"right\", \"style\": \"hard\"|\"soft\", \"duration_sec\", \"feather_frac\" (optional, soft only, default 0.03) } — outgoing scene slides off-screen in direction, incoming slides in from the opposite edge; \"hard\" has a sharp leading edge, \"soft\" feathers/blurs it over feather_frac of canvas width. EVERY transition type is an OVERLAP, not an addition — duration_sec is consumed from the tail of the outgoing scene's clip and the head of the incoming scene's clip, so total video duration decreases slightly whenever a transition is used. This is the OPPOSITE of pause_before_sec, which adds time. duration_sec alone controls transition speed for every type; hard/soft is purely an edge-treatment choice, not a speed choice.",
     "easing_values": [
       "instant",
       "linear",
@@ -54,17 +54,50 @@
     }
   },
   "asset_registry": {
-    "bg_studio_default": "assets/backgrounds/default_studio.jpg",
-    "bg_cyber": "assets/backgrounds/cyberpunk_room.jpg",
-    "mrmouse_relaxed": "assets/sprites/mrmouse_relaxed.png",
-    "mrmouse_pointing": "assets/sprites/mrmouse_pointing.png",
-    "mrmouse_laptop": "assets/sprites/mrmouse_laptop.png",
-    "mrmouse_excited": "assets/sprites/mrmouse_excited.png",
-    "img_gpu_diagram": "assets/images/gpu_core_diagram.jpg",
-    "img_core_grid": "assets/images/gpu_core_grid.jpg",
-    "sfx_pop": "assets/audio/sfx/pop.mp3",
-    "sfx_whoosh": "assets/audio/sfx/whoosh.mp3",
-    "music_main": "assets/audio/monkeys_spinning_monkeys.mp3"
+    "bg_studio_default": {
+      "path": "assets/backgrounds/default_studio.jpg",
+      "generate": null
+    },
+    "bg_cyber": {
+      "path": "assets/backgrounds/cyberpunk_room.jpg",
+      "generate": null
+    },
+    "mrmouse_relaxed": {
+      "path": "assets/sprites/mrmouse_relaxed.png",
+      "generate": null
+    },
+    "mrmouse_pointing": {
+      "path": "assets/sprites/mrmouse_pointing.png",
+      "generate": null
+    },
+    "mrmouse_laptop": {
+      "path": "assets/sprites/mrmouse_laptop.png",
+      "generate": null
+    },
+    "mrmouse_excited": {
+      "path": "assets/sprites/mrmouse_excited.png",
+      "generate": null
+    },
+    "img_gpu_diagram": {
+      "path": "assets/images/gpu_core_diagram.jpg",
+      "generate": null
+    },
+    "img_core_grid": {
+      "path": "assets/images/gpu_core_grid.jpg",
+      "generate": null
+    },
+    "sfx_pop": {
+      "path": "assets/audio/sfx/pop.mp3",
+      "generate": null
+    },
+    "sfx_whoosh": {
+      "path": "assets/audio/sfx/whoosh.mp3",
+      "generate": null
+    },
+    "music_main": {
+      "path": "assets/audio/monkeys_spinning_monkeys.mp3",
+      "generate": null
+    }
   },
   "scenes": [
     {

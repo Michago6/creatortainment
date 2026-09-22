@@ -55,17 +55,50 @@
     }
   },
   "asset_registry": {
-    "bg_studio_default": "assets/backgrounds/default_studio.jpg",
-    "bg_cyber": "assets/backgrounds/cyberpunk_room.jpg",
-    "mrmouse_relaxed": "assets/sprites/mrmouse_relaxed.png",
-    "mrmouse_pointing": "assets/sprites/mrmouse_pointing.png",
-    "mrmouse_laptop": "assets/sprites/mrmouse_laptop.png",
-    "mrmouse_excited": "assets/sprites/mrmouse_excited.png",
-    "img_gpu_diagram": "assets/images/gpu_core_diagram.jpg",
-    "img_core_grid": "assets/images/gpu_core_grid.jpg",
-    "sfx_pop": "assets/audio/sfx/pop.mp3",
-    "sfx_whoosh": "assets/audio/sfx/whoosh.mp3",
-    "music_main": "assets/audio/monkeys_spinning_monkeys.mp3"
+    "bg_studio_default": {
+      "path": "assets/backgrounds/default_studio.jpg",
+      "generate": null
+    },
+    "bg_cyber": {
+      "path": "assets/backgrounds/cyberpunk_room.jpg",
+      "generate": null
+    },
+    "mrmouse_relaxed": {
+      "path": "assets/sprites/mrmouse_relaxed.png",
+      "generate": null
+    },
+    "mrmouse_pointing": {
+      "path": "assets/sprites/mrmouse_pointing.png",
+      "generate": null
+    },
+    "mrmouse_laptop": {
+      "path": "assets/sprites/mrmouse_laptop.png",
+      "generate": null
+    },
+    "mrmouse_excited": {
+      "path": "assets/sprites/mrmouse_excited.png",
+      "generate": null
+    },
+    "img_gpu_diagram": {
+      "path": "assets/images/gpu_core_diagram.jpg",
+      "generate": null
+    },
+    "img_core_grid": {
+      "path": "assets/images/gpu_core_grid.jpg",
+      "generate": null
+    },
+    "sfx_pop": {
+      "path": "assets/audio/sfx/pop.mp3",
+      "generate": null
+    },
+    "sfx_whoosh": {
+      "path": "assets/audio/sfx/whoosh.mp3",
+      "generate": null
+    },
+    "music_main": {
+      "path": "assets/audio/monkeys_spinning_monkeys.mp3",
+      "generate": null
+    }
   },
   "scenes": [
     {

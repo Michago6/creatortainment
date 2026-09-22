@@ -60,10 +60,9 @@ def _storyboard_keyframe(element: dict[str, Any]) -> dict[str, Any]:
 
 
 def _asset_path(registry: dict[str, Any], key: str, assets_root: Path) -> Path:
-    relative_path = Path(registry[key])
-    if relative_path.parts and relative_path.parts[0] == "assets":
-        relative_path = Path(*relative_path.parts[1:])
-    return assets_root / relative_path
+    entry = registry[key]
+    relative_path = entry["path"] if isinstance(entry, dict) else entry.path
+    return assets_root.parent / Path(relative_path)
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:

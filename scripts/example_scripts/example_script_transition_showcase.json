@@ -54,12 +54,30 @@
     }
   },
   "asset_registry": {
-    "bg_plain_white": "assets/backgrounds/plain_white.jpg",
-    "bg_cyberpunk_room": "assets/backgrounds/cyberpunk_room.jpg",
-    "bg_retro_arcade_1980s": "assets/backgrounds/retro_arcade_1980s.jpg",
-    "bg_default_studio": "assets/backgrounds/default_studio.jpg",
-    "bg_retro_arcade_closeup": "assets/backgrounds/retro_arcade_closeup.jpg",
-    "mrmouse_pointing": "assets/sprites/mrmouse_pointing.png"
+    "bg_plain_white": {
+      "path": "assets/backgrounds/plain_white.jpg",
+      "generate": null
+    },
+    "bg_cyberpunk_room": {
+      "path": "assets/backgrounds/cyberpunk_room.jpg",
+      "generate": null
+    },
+    "bg_retro_arcade_1980s": {
+      "path": "assets/backgrounds/retro_arcade_1980s.jpg",
+      "generate": null
+    },
+    "bg_default_studio": {
+      "path": "assets/backgrounds/default_studio.jpg",
+      "generate": null
+    },
+    "bg_retro_arcade_closeup": {
+      "path": "assets/backgrounds/retro_arcade_closeup.jpg",
+      "generate": null
+    },
+    "mrmouse_pointing": {
+      "path": "assets/sprites/mrmouse_pointing.png",
+      "generate": null
+    }
   },
   "scenes": [
     {
