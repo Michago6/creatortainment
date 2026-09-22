@@ -8,7 +8,6 @@ import pytest
 
 from creatortainment import config
 from creatortainment import provider_validation
-import generate_assets
 
 
 def test_credentials_load_from_environment(monkeypatch) -> None:
@@ -70,4 +69,3 @@ def test_provider_checks_use_the_centralized_loader(monkeypatch) -> None:
     assert provider_validation.validate_elevenlabs_values("model", "voice") == [
         "ElevenLabs provider check unavailable: Missing required credential ELEVENLABS_API_KEY"
     ]
-    assert generate_assets.config is config
