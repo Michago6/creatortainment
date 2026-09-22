@@ -27,7 +27,7 @@ class ScriptModelBase(BaseModel):
         return getattr(self, key, default)
 
     def __contains__(self, key: str) -> bool:
-        if key in self.model_fields:
+        if key in type(self).model_fields:
             return getattr(self, key) is not None
         extra = getattr(self, "__pydantic_extra__", None) or {}
         return key in extra
