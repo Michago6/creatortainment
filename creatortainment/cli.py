@@ -28,6 +28,7 @@ from .project_identity import (
     write_project_state,
 )
 from .render.moviepy_scene import build_full_video_clip
+from .render.mock import render_storyboard
 from .schema.validate import load_script, validate_script
 
 
@@ -171,6 +172,28 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
     print(f"Video render: {destination}")
     if preview:
         print("Preview mode: quarter resolution, reduced frame rate, and fast encoding.")
+    return 0
+
+
+def storyboard_command(script_path: Path, output: Path | None) -> int:
+    script = load_script(script_path)
+    result = validate_script(script, ASSETS_ROOT)
+    if not result.valid:
+        print("Cannot render a storyboard for an invalid script:", file=sys.stderr)
+        for error in result.errors:
+            print(f"- {error}", file=sys.stderr)
+        return 1
+
+    project_dir = PROJECTS_ROOT / project_slug(script["project"]["title"])
+    project_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(script_path, project_dir / "script.json")
+    destination = output or (project_dir / "storyboard.png")
+    if not destination.is_absolute():
+        destination = project_dir / destination
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    render_storyboard(script, ASSETS_ROOT, destination)
+    print(f"Project: {project_dir}")
+    print(f"Storyboard: {destination}")
     return 0
 
 
@@ -371,6 +394,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Render at quarter resolution with faster encoding settings.",
     )
+    storyboard = commands.add_parser(
+        "storyboard",
+        help="Generate a fast visual storyboard PNG without narration or video rendering.",
+    )
+    storyboard.add_argument("script", type=Path)
+    storyboard.add_argument("--out", type=Path, help="Output PNG path relative to the project.")
     align = commands.add_parser("align", help="Generate or reuse the full-video narration manifest.")
     align.add_argument("script", type=Path)
     align.add_argument("--force-audio", action="store_true", help="Always create a new narration without confirmation.")
@@ -384,6 +413,8 @@ def main(argv: list[str] | None = None) -> int:
         return validate_command(args.script)
     if args.command == "render":
         return render_command(args.script, args.out, args.preview)
+    if args.command == "storyboard":
+        return storyboard_command(args.script, args.out)
     if args.command == "align":
         return align_command(args.script, args.force_audio, args.debug)
     return 2

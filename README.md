@@ -69,25 +69,25 @@ A storyboard is the fastest way to inspect scene backgrounds, character
 placement, element sizing, and rough caption layout before spending time on
 audio or video rendering.
 
-The current storyboard renderer is available as a small Python command:
+Run the dedicated storyboard command:
 
 ```bash
-.venv/bin/python -c '
-from pathlib import Path
-from creatortainment.schema.validate import load_script
-from creatortainment.render.mock import render_storyboard
-
-script_path = Path("scripts/pac-man-ghosts-were-never-smart.json")
-output_path = Path("projects/pac-man-ghosts-were-never-smart/storyboard.png")
-render_storyboard(load_script(script_path), Path("assets"), output_path)
-print(f"Storyboard: {output_path}")
-'
+.venv/bin/python -m creatortainment storyboard \
+  scripts/pac-man-ghosts-were-never-smart.json
 ```
 
-Open:
+By default, this creates the project folder if needed and writes:
 
 ```text
 projects/pac-man-ghosts-were-never-smart/storyboard.png
+```
+
+To choose another output path inside the project folder:
+
+```bash
+.venv/bin/python -m creatortainment storyboard \
+  scripts/pac-man-ghosts-were-never-smart.json \
+  --out storyboard/iteration-02.png
 ```
 
 This is the perfect stage for iteration. Open the JSON script, adjust scene
