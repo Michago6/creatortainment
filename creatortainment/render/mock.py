@@ -9,6 +9,8 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .visual_assets import first_frame_image, visual_dimensions
+
 
 def storyboard_panel_size(
     resolution: tuple[int, int], panel_width: int = 360
@@ -45,8 +47,7 @@ class AssetDimensionCache:
 
     def dimensions(self, path: Path) -> tuple[int, int]:
         if path not in self._dimensions:
-            with Image.open(path) as image:
-                self._dimensions[path] = image.size
+            self._dimensions[path] = visual_dimensions(path)
         return self._dimensions[path]
 
 
@@ -119,7 +120,7 @@ def _place_element(
         return
 
     keyframe = _storyboard_keyframe(element)
-    image = Image.open(asset_path).convert("RGBA")
+    image = first_frame_image(asset_path)
     native_width, native_height = dimension_cache.dimensions(asset_path)
     target_height = keyframe.get("target_height_frac")
     target_width = keyframe.get("target_width_frac")
@@ -178,7 +179,7 @@ def render_storyboard(script: dict[str, Any], assets_root: Path, output_path: Pa
         draw = ImageDraw.Draw(panel)
         asset_path = _asset_path(script["asset_registry"], scene["bg"], assets_root)
         if asset_path.is_file():
-            background = Image.open(asset_path).convert("RGB")
+            background = first_frame_image(asset_path).convert("RGB")
             scale = max(canvas_width / background.width, canvas_height / background.height)
             background = background.resize(
                 (round(background.width * scale), round(background.height * scale)),

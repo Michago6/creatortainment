@@ -11,7 +11,6 @@ from moviepy import (
     AudioClip,
     CompositeAudioClip,
     CompositeVideoClip,
-    ImageClip,
     TextClip,
     VideoClip,
     concatenate_videoclips,
@@ -27,6 +26,7 @@ from .captions import (
 )
 from ..audio.mixing import build_final_audio_mix
 from .mock import AssetDimensionCache, _asset_path
+from .visual_assets import is_animated_visual, load_visual_clip
 from .keyframes import resolve_element_state
 from .timeline import build_scene_final_offsets
 from ..timeline import timed_element
@@ -34,9 +34,9 @@ from ..timeline import timed_element
 SOFT_PUSH_FEATHER_FRAC = 0.25
 
 
-def _cover_background(path: Path, resolution: tuple[int, int], duration: float) -> ImageClip:
+def _cover_background(path: Path, resolution: tuple[int, int], duration: float) -> VideoClip:
     width, height = resolution
-    clip = ImageClip(str(path))
+    clip = load_visual_clip(path, duration)
     scale = max(width / clip.w, height / clip.h)
     resized = clip.resized(new_size=(round(clip.w * scale), round(clip.h * scale)))
     return resized.cropped(
@@ -54,9 +54,9 @@ def _element_clip(
     resolution: tuple[int, int],
     duration: float,
     dimension_cache: AssetDimensionCache,
-) -> ImageClip:
+) -> VideoClip:
     path = _asset_path(registry, element["asset"], assets_root)
-    image = ImageClip(str(path))
+    image = load_visual_clip(path, duration)
     native_width, native_height = dimension_cache.dimensions(path)
     keyframe = element["keyframes"][0]
     target_height = keyframe.get("target_height_frac")
@@ -116,7 +116,12 @@ def _animated_element_clip(
 ) -> VideoClip:
     """Create a cropped dynamic clip driven by resolved element states."""
     path = _asset_path(registry, element["asset"], assets_root)
-    source = Image.open(path).convert("RGBA")
+    source_clip = load_visual_clip(path, duration) if is_animated_visual(path) else None
+    if source_clip is None:
+        with Image.open(path) as image_file:
+            source = image_file.convert("RGBA")
+    else:
+        source = None
     timed = timed_element(element, scene, scene_manifest, manifest)
     canvas_width, canvas_height = resolution
     native_width, native_height = dimension_cache.dimensions(path)
@@ -137,7 +142,11 @@ def _animated_element_clip(
         else:
             width = max(1, round(state["size_value"] * canvas_width))
             height = max(1, round(native_height * width / native_width))
-        image = source.resize((width, height), Image.Resampling.LANCZOS)
+        if source_clip is not None:
+            image = Image.fromarray(source_clip.get_frame(local_time)).convert("RGBA")
+            image = image.resize((width, height), Image.Resampling.LANCZOS)
+        else:
+            image = source.resize((width, height), Image.Resampling.LANCZOS)
         opacity = max(0.0, min(1.0, state["opacity"]))
         if opacity != 1.0:
             alpha = image.getchannel("A").point(lambda value: round(value * opacity))
@@ -165,13 +174,25 @@ def _animated_element_clip(
         duration=duration,
         has_constant_size=False,
     )
+    if source_clip is not None:
+        clip._visual_source = source_clip
     mask = VideoClip(
         frame_function=mask_frame,
         is_mask=True,
         duration=duration,
         has_constant_size=False,
     )
-    return clip.with_mask(mask).with_position(position)
+    result = clip.with_mask(mask).with_position(position)
+    if source_clip is not None:
+        result._visual_source = source_clip
+        original_close = result.close
+
+        def close() -> None:
+            original_close()
+            source_clip.close()
+
+        result.close = close
+    return result
 
 
 def build_static_scene_clip(
