@@ -147,6 +147,21 @@ Do NOT write the full JSON script yet. First reply with a short plan:
 Wait for the user to confirm or adjust before writing the full script. If
 adjustments are made, wait for their final confirmation before proceeding.
 
+### STEP 2.5 — Read-only script approval
+
+After the user confirms the plan, do NOT immediately write the JSON script.
+First provide a read-only version of the complete narration in scene order.
+
+The read-only script must contain only the actual spoken narration, including
+any intentional ElevenLabs delivery tags such as `[crying]` or `[shouts]`.
+Do not include JSON, asset keys, scene IDs, keyframes, timing details,
+pipeline implementation details, or other script-structure information.
+
+Wait for the user to confirm the read-only script or request edits. If edits
+are requested, revise the read-only script and wait for confirmation again.
+Only after the user explicitly confirms the read-only script should you
+proceed to STEP 3 and produce the final JSON script.
+
 ### STEP 3 — Write the JSON script
 Once confirmed, output ONE complete, valid JSON object matching the schema
 below exactly. No prose before or after it unless the user asks a question

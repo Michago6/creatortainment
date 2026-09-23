@@ -672,6 +672,23 @@ If a dependency cycle exists, generation must fail rather than guessing an order
 
 ---
 
+## Video assets
+
+Assets may be video files such as MP4 in addition to still images.
+
+A video asset can be referenced anywhere the schema permits that asset type.
+For background video, the video fills the project canvas using the same
+cover-fit behavior as a background image.
+
+Video assets are time-based media rather than static images. The renderer
+should preserve their temporal playback rather than treating them as a
+single still frame.
+
+If a video asset is shorter than the scene duration, the renderer should
+follow the project's defined video-loop/repeat behavior. If no such behavior
+is defined by the schema or renderer, the script author must not assume
+looping.
+
 # 10. Elements
 
 Elements are scene-local visual objects layered over a background.
