@@ -21,7 +21,7 @@ PROJECT = ROOT / "projects/understanding_gpu_architecture"
 def _script() -> dict:
     """Load the real portrait example script."""
     return json.loads(
-        (ROOT / "scripts/example_scripts/example_script.json").read_text(
+        (ROOT / "scripts/testing_scripts/example_script.json").read_text(
             encoding="utf-8"
         )
     )

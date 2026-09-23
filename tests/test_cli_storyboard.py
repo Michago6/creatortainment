@@ -12,7 +12,7 @@ from creatortainment import cli
 from creatortainment.schema.validate import load_script
 
 
-SCRIPT = Path("scripts/example_scripts/example_script.json")
+SCRIPT = Path("scripts/testing_scripts/example_script.json")
 PROJECT_SLUG = cli.project_slug(load_script(SCRIPT)["project"]["title"])
 
 

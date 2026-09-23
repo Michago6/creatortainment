@@ -16,7 +16,7 @@ PROJECT = ROOT / "projects/understanding_gpu_architecture"
 def test_scene_narration_slice_matches_manifest_duration() -> None:
     """A scene audio slice duration matches its manifest start/end interval."""
     script = json.loads(
-        (ROOT / "scripts/example_scripts/example_script.json").read_text(encoding="utf-8")
+        (ROOT / "scripts/testing_scripts/example_script.json").read_text(encoding="utf-8")
     )
     manifest = json.loads((PROJECT / "build_manifest.json").read_text(encoding="utf-8"))
     scene_manifest = manifest["scenes"][0]

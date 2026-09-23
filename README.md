@@ -128,7 +128,9 @@ To choose another output path inside the project folder:
 This is the perfect stage for iteration. Open the JSON script, adjust scene
 backgrounds, element `pos` values, sizes, anchors, captions, or timing, and
 run the storyboard command again. Repeat until the visual plan feels good.
-There is no API call and no video render cost at this stage. ✨
+The storyboard requires only a valid script and its visual assets; it does not
+call ElevenLabs or spend ElevenLabs credits. This is the fastest way to get a
+visual overview of the project before generating narration. ✨
 
 ### 4. Generate or reuse narration alignment
 

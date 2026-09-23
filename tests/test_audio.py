@@ -13,7 +13,7 @@ from creatortainment.audio.tokenize import tokenize
 
 
 ROOT = Path(__file__).parents[1]
-SCRIPT_PATH = ROOT / "scripts/example_scripts/example_script.json"
+SCRIPT_PATH = ROOT / "scripts/testing_scripts/example_script.json"
 FIXTURE_PATH = ROOT / "tests/fixtures/mock_elevenlabs_response.json"
 
 

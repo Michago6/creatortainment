@@ -20,10 +20,10 @@ from creatortainment.schema.validate import load_script, validate_script
 
 
 ROOT = Path(__file__).parents[1]
-SCRIPTS = ROOT / "scripts/example_scripts"
+SCRIPTS = ROOT / "scripts/testing_scripts"
 
 
-def test_all_example_scripts_load_as_typed_models() -> None:
+def test_all_testing_scripts_load_as_typed_models() -> None:
     for path in sorted(SCRIPTS.glob("*.json")):
         model = load_script(path)
         result = validate_script(model, ROOT / "assets")

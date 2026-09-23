@@ -19,7 +19,7 @@ ASSETS = ROOT / "assets"
 
 def _script() -> dict:
     return json.loads(
-        (ROOT / "scripts/example_scripts/example_script.json").read_text(encoding="utf-8")
+        (ROOT / "scripts/testing_scripts/example_script.json").read_text(encoding="utf-8")
     )
 
 
@@ -33,7 +33,7 @@ def test_stop_cue_fixture_builds_final_video_audio() -> None:
     """A stop cue fades to silence without entering duck-ratio validation."""
     script = json.loads(
         (
-            ROOT / "scripts/example_scripts/example_script_music_pause.json"
+            ROOT / "scripts/testing_scripts/example_script_music_pause.json"
         ).read_text(encoding="utf-8")
     )
     manifest = _manifest()

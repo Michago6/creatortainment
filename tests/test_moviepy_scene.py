@@ -21,7 +21,7 @@ ASSETS = ROOT / "assets"
 
 def _script(name: str) -> dict:
     return json.loads(
-        (ROOT / "scripts/example_scripts" / name).read_text(encoding="utf-8")
+        (ROOT / "scripts/testing_scripts" / name).read_text(encoding="utf-8")
     )
 
 

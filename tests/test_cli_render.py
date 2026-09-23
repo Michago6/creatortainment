@@ -57,7 +57,7 @@ def test_preview_script_scales_canvas_positions_and_caption_sizes() -> None:
 def test_preview_script_scales_typed_models() -> None:
     """Preview preparation also scales the Pydantic-backed script model."""
     script = load_script(
-        Path("scripts/example_scripts/example_script.json")
+        Path("scripts/testing_scripts/example_script.json")
     )
     preview = scale_script_for_preview(script)
     assert preview["project"]["resolution"] == [270, 480]

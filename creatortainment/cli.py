@@ -358,15 +358,17 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
             encoding="utf-8",
         )
     incoming_hash = narration_hash(script)
-    existing = project_dir.exists()
+    initialized = project_state_path(project_dir).is_file()
     model = script["project"].get("tts_model", DEFAULT_TTS_MODEL)
     voice_id = script["project"].get("voice_id")
     if not isinstance(voice_id, str) or not voice_id.strip():
         raise RuntimeError(
             "project.voice_id is required in the input script and must contain an ElevenLabs voice ID."
         )
-    matched_audio = find_matching_narration(project_dir, incoming_hash) if existing else None
-    if existing and not force_audio:
+    matched_audio = (
+        find_matching_narration(project_dir, incoming_hash) if initialized else None
+    )
+    if initialized and not force_audio:
         state = read_project_state(project_state_path(project_dir))
         print(f"A project named '{title}' already exists (last updated {state.get('updated_at', 'unknown')}).")
         same = matched_audio is not None
@@ -401,7 +403,7 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
             shutil.copy2(script_path, project_dir / "script.json")
             print("Project metadata updated; existing narration remains active.")
             return 0
-    elif not existing:
+    elif not initialized:
         project_dir.mkdir(parents=True, exist_ok=True)
         write_project_state(project_state_path(project_dir), new_state(script))
 
