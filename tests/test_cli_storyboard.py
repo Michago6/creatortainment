@@ -25,8 +25,9 @@ def test_storyboard_command_uses_default_project_output(
 
     assert cli.storyboard_command(SCRIPT, None) == 0
 
-    output = tmp_path / "projects" / PROJECT_SLUG / "storyboard.png"
-    assert output.is_file()
+    outputs = list((tmp_path / "projects" / PROJECT_SLUG).glob("storyboard_*.png"))
+    assert len(outputs) == 1
+    output = outputs[0]
     with Image.open(output) as image:
         assert image.format == "PNG"
 
@@ -44,6 +45,33 @@ def test_storyboard_command_supports_output_override(
     assert output.is_file()
 
 
+def test_output_names_use_required_timestamp_formats() -> None:
+    timestamp = "20260923_165012"
+    assert cli.output_filename("render", timestamp=timestamp) == (
+        "render_20260923_165012.mp4"
+    )
+    assert cli.output_filename("render", timestamp=timestamp, preview=True) == (
+        "render_20260923_165012_preview.mp4"
+    )
+    assert cli.output_filename("storyboard", timestamp=timestamp) == (
+        "storyboard_20260923_165012.png"
+    )
+
+
+def test_non_overwriting_path_adds_timestamp_and_resolves_collisions(
+    tmp_path: Path,
+) -> None:
+    existing = tmp_path / "render.mp4"
+    existing.write_bytes(b"first")
+    first = cli.non_overwriting_path(existing, timestamp="20260923_165012")
+    first.write_bytes(b"second")
+    second = cli.non_overwriting_path(existing, timestamp="20260923_165012")
+
+    assert first.name == "render_20260923_165012.mp4"
+    assert second.name == "render_20260923_165013.mp4"
+    assert existing.read_bytes() == b"first"
+
+
 def test_storyboard_command_rejects_invalid_script_without_output(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -56,4 +84,4 @@ def test_storyboard_command_rejects_invalid_script_without_output(
     monkeypatch.setattr(cli, "ASSETS_ROOT", Path("assets"))
 
     assert cli.storyboard_command(script_path, None) == 1
-    assert not (tmp_path / "projects" / "example_script" / "storyboard.png").exists()
+    assert not (tmp_path / "projects" / "example_script").exists()

@@ -114,7 +114,7 @@ Run the dedicated storyboard command:
 By default, this creates the project folder if needed and writes:
 
 ```text
-projects/pac-man-ghosts-were-never-smart/storyboard.png
+projects/pac-man-ghosts-were-never-smart/storyboard_YYYYMMDD_HHMMSS.png
 ```
 
 To choose another output path inside the project folder:
@@ -172,13 +172,13 @@ for checking:
 .venv/bin/python -m creatortainment render \
   scripts/pac-man-ghosts-were-never-smart.json \
   --preview \
-  --out preview.mp4
+  --out output/preview.mp4
 ```
 
 The output is written relative to the project folder:
 
 ```text
-projects/pac-man-ghosts-were-never-smart/preview.mp4
+projects/pac-man-ghosts-were-never-smart/output/render_YYYYMMDD_HHMMSS_preview.mp4
 ```
 
 Watch the preview before starting a full render. If something feels off,
@@ -194,13 +194,13 @@ When the storyboard and preview look right, render at the script's actual
 ```bash
 .venv/bin/python -m creatortainment render \
   scripts/pac-man-ghosts-were-never-smart.json \
-  --out final.mp4
+  --out output/final.mp4
 ```
 
 Final output:
 
 ```text
-projects/pac-man-ghosts-were-never-smart/final.mp4
+projects/pac-man-ghosts-were-never-smart/output/render_YYYYMMDD_HHMMSS.mp4
 ```
 
 Full-resolution rendering can take a while, especially for portrait videos
@@ -218,7 +218,7 @@ For a more descriptive filename:
 That file will be written to:
 
 ```text
-projects/pac-man-ghosts-were-never-smart/output/pac-man-ghosts-were-never-smart-final.mp4
+projects/pac-man-ghosts-were-never-smart/output/render_YYYYMMDD_HHMMSS.mp4
 ```
 
 ## What gets created
@@ -232,10 +232,10 @@ projects/pac-man-ghosts-were-never-smart/
 ├── build_manifest.json
 ├── build_manifests/
 ├── narrations/
-├── storyboard.png
-├── preview.mp4
-└── output/
-    └── pac-man-ghosts-were-never-smart-final.mp4
+├── storyboard_YYYYMMDD_HHMMSS.png
+├── output/
+│   ├── render_YYYYMMDD_HHMMSS_preview.mp4
+│   └── render_YYYYMMDD_HHMMSS.mp4
 ```
 
 The script-specific manifest under `build_manifests/` is used when available.
@@ -333,8 +333,9 @@ see what the project will look like:
 This is the fastest way to get an overview of the project's scenes, asset
 placement, composition, and captions before spending time on narration
 alignment or a video render. The storyboard is written to the project's
-`storyboard.png` file. Use `--out <path>` to choose another output path inside
-the project folder.
+`storyboard_YYYYMMDD_HHMMSS.png` file. Use `--out <path>` to choose another
+output path inside the project folder. Existing storyboard and render files are
+never overwritten; a timestamped alternative name is selected when needed.
 
 ### Align
 

@@ -84,7 +84,7 @@ def test_storyboard_then_align_initializes_partial_project_without_prompt(
     script_path, project_dir = _prepare(tmp_path, monkeypatch)
 
     assert cli.storyboard_command(script_path, None) == 0
-    assert (project_dir / "storyboard.png").is_file()
+    assert len(list(project_dir.glob("storyboard_*.png"))) == 1
     assert not project_state_path(project_dir).exists()
 
     assert cli.align_command(script_path, force_audio=False, debug=False) == 0

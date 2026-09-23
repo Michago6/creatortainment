@@ -8,7 +8,7 @@ import json
 import shutil
 import sys
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .audio.alignment import align_scenes
@@ -39,6 +39,46 @@ from .provider_validation import validate_elevenlabs_values, validate_fal_models
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSETS_ROOT = REPO_ROOT / "assets"
 PROJECTS_ROOT = REPO_ROOT / "projects"
+
+
+def output_timestamp(now: datetime | None = None) -> str:
+    """Return the shared timestamp format used for generated visual outputs."""
+    return (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
+
+
+def output_filename(
+    kind: str,
+    *,
+    timestamp: str,
+    preview: bool = False,
+) -> str:
+    """Build a timestamped render or storyboard filename."""
+    if kind == "render":
+        suffix = "_preview" if preview else ""
+        return f"render_{timestamp}{suffix}.mp4"
+    if kind == "storyboard":
+        return f"storyboard_{timestamp}.png"
+    raise ValueError(f"Unknown output kind: {kind!r}")
+
+
+def non_overwriting_path(
+    path: Path,
+    *,
+    timestamp: str,
+) -> Path:
+    """Return a path that does not overwrite an existing output."""
+    if not path.exists():
+        return path
+    candidate = path.with_name(
+        f"{path.stem}_{timestamp}{path.suffix}"
+    )
+    collision_time = datetime.strptime(timestamp, "%Y%m%d_%H%M%S")
+    while candidate.exists():
+        collision_time += timedelta(seconds=1)
+        candidate = path.with_name(
+            f"{path.stem}_{output_timestamp(collision_time)}{path.suffix}"
+        )
+    return candidate
 
 
 def scale_script_for_preview(script: dict) -> dict:
@@ -215,9 +255,15 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
     project_dir = PROJECTS_ROOT / project_slug(script["project"]["title"])
     project_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(script_path, project_dir / "script.json")
-    destination = output or (project_dir / "output" / "video.mp4")
+    timestamp = output_timestamp()
+    destination = output or (
+        project_dir
+        / "output"
+        / output_filename("render", timestamp=timestamp, preview=preview)
+    )
     if not destination.is_absolute():
         destination = project_dir / destination
+    destination = non_overwriting_path(destination, timestamp=timestamp)
     manifest_path = variant_manifest_path(project_dir, script_path)
     if not manifest_path.is_file():
         manifest_path = project_dir / "build_manifest.json"
@@ -266,9 +312,13 @@ def storyboard_command(script_path: Path, output: Path | None) -> int:
     project_dir = PROJECTS_ROOT / project_slug(script["project"]["title"])
     project_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(script_path, project_dir / "script.json")
-    destination = output or (project_dir / "storyboard.png")
+    timestamp = output_timestamp()
+    destination = output or (
+        project_dir / output_filename("storyboard", timestamp=timestamp)
+    )
     if not destination.is_absolute():
         destination = project_dir / destination
+    destination = non_overwriting_path(destination, timestamp=timestamp)
     destination.parent.mkdir(parents=True, exist_ok=True)
     render_storyboard(script, ASSETS_ROOT, destination)
     print(f"Project: {project_dir}")
