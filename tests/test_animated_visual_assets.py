@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -59,6 +60,51 @@ def test_short_mp4_loops_to_exact_duration_and_has_no_audio() -> None:
         assert clip.get_frame(2.4).shape[:2] == (470, 854)
     finally:
         clip.close()
+
+
+def test_short_animated_assets_do_not_read_past_source_end() -> None:
+    cases = (
+        ("test_animation_short.gif", 0.8),
+        ("test_animation_short.mp4", 0.97),
+    )
+    for filename, source_end_time in cases:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            clip = load_visual_clip(IMAGES / filename, 2.5)
+            try:
+                clip.get_frame(source_end_time)
+            finally:
+                clip.close()
+
+        end_of_clip_warnings = [
+            warning
+            for warning in caught
+            if isinstance(warning.message, UserWarning)
+            and "0 bytes read" in str(warning.message)
+        ]
+        assert end_of_clip_warnings == []
+
+
+def test_short_gif_preserves_all_four_source_frames() -> None:
+    source = VideoFileClip(str(IMAGES / "test_animation_short.gif"), audio=False)
+    clip = load_visual_clip(IMAGES / "test_animation_short.gif", 2.5)
+    try:
+        expected_frames = [
+            source.get_frame(frame_number / source.fps)
+            for frame_number in range(4)
+        ]
+        rendered_frames = [
+            clip.get_frame(frame_number / source.fps)
+            for frame_number in range(4)
+        ]
+        assert all(
+            np.array_equal(expected, rendered)
+            for expected, rendered in zip(expected_frames, rendered_frames)
+        )
+        assert not np.array_equal(rendered_frames[-1], rendered_frames[0])
+    finally:
+        clip.close()
+        source.close()
 
 
 def test_long_gif_is_trimmed_to_exact_duration() -> None:
