@@ -270,6 +270,18 @@ images and audio in `assets/`; generated project files belong in
 Validates the typed script model, referenced assets, word indexes, element
 keyframes, caption values, music cues, and transition shapes.
 
+Invalid scripts are reported with JSON paths and readable explanations instead
+of repeated raw Pydantic messages. Repeated identical schema errors are grouped
+by path. For example, legacy string-valued asset entries are identified with a
+hint to use the current object format:
+
+```text
+✗ asset_registry.white_portrait.jpg
+  Expected an asset object, but got a string ('assets/backgrounds/white_portrait.jpg').
+Hint: asset_registry entries must use the current object format.
+This script appears to use the legacy string format.
+```
+
 For generated assets, the effective fal.ai model is resolved from the
 asset-level `generate.model` first, then
 `project.generation_defaults[generation_method]`. Only generation methods

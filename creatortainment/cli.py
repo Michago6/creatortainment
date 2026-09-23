@@ -10,6 +10,7 @@ import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 from .audio.alignment import align_scenes
 from .audio.elevenlabs_client import ElevenLabsNarrationClient
@@ -32,7 +33,12 @@ from .project_identity import (
 )
 from .render.moviepy_scene import build_full_video_clip
 from .render.mock import render_storyboard
-from .schema.validate import asset_generation_plans, load_script, validate_script
+from .schema.validate import (
+    ScriptValidationError,
+    asset_generation_plans,
+    load_script,
+    validate_script,
+)
 from .provider_validation import validate_elevenlabs_values, validate_fal_models
 
 
@@ -178,8 +184,91 @@ def _print_validation_error(error: str) -> None:
         print(f"- {error}", file=sys.stderr)
 
 
+def _format_json_path(location: tuple[Any, ...]) -> str:
+    path = ""
+    for part in location:
+        if isinstance(part, int):
+            path += f"[{part}]"
+        else:
+            path += f".{part}" if path else str(part)
+    return path or "<script>"
+
+
+def _format_actual_value(value: object) -> str:
+    if isinstance(value, str):
+        return f"a string ({value!r})"
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "a boolean"
+    if isinstance(value, dict):
+        return "an object"
+    if isinstance(value, list):
+        return "an array"
+    return type(value).__name__
+
+
+def _format_pydantic_error(error: dict[str, Any]) -> str:
+    error_type = error.get("type")
+    actual = _format_actual_value(error.get("input"))
+    if error_type in {"dict_type", "model_type"}:
+        if tuple(error.get("loc", ()))[:1] == ("asset_registry",):
+            return f"Expected an asset object, but got {actual}."
+        return f"Expected an object, but got {actual}."
+    if error_type == "string_type":
+        return f"Expected a string, but got {actual}."
+    if error_type in {"int_type", "int_parsing"}:
+        return f"Expected an integer, but got {actual}."
+    if error_type in {"float_type", "float_parsing"}:
+        return f"Expected a number, but got {actual}."
+    if error_type == "bool_type":
+        return f"Expected a boolean, but got {actual}."
+    if error_type == "list_type":
+        return f"Expected an array, but got {actual}."
+    if error_type == "missing":
+        return "This required value is missing."
+    if error_type == "literal_error":
+        expected = error.get("ctx", {}).get("expected")
+        return f"Expected {expected or 'one of the allowed values'}; got {error.get('input')!r}."
+    return error.get("msg", "Value does not satisfy the schema.")
+
+
+def format_validation_errors(errors: list[dict[str, Any]]) -> list[str]:
+    """Format structured Pydantic errors as concise, path-aware CLI lines."""
+    grouped: dict[tuple[str, str], list[str]] = {}
+    legacy_asset_paths: list[str] = []
+    for error in errors:
+        path = _format_json_path(tuple(error.get("loc", ())))
+        message = _format_pydantic_error(error)
+        key = (error.get("type", ""), message)
+        grouped.setdefault(key, []).append(path)
+        location = tuple(error.get("loc", ()))
+        if (
+            len(location) >= 2
+            and location[0] == "asset_registry"
+            and isinstance(error.get("input"), str)
+        ):
+            legacy_asset_paths.append(path)
+
+    lines: list[str] = []
+    for (_, message), paths in grouped.items():
+        lines.append(f"✗ {', '.join(paths)}\n  {message}")
+    if len(legacy_asset_paths) >= 2:
+        lines.append(
+            "Hint: asset_registry entries must use the current object format.\n"
+            "This script appears to use the legacy string format."
+        )
+    return lines
+
+
 def validate_command(script_path: Path, asset_gen_info: bool = False) -> int:
-    script = load_script(script_path)
+    try:
+        script = load_script(script_path)
+    except ScriptValidationError as exc:
+        print(f"Invalid: {script_path}", file=sys.stderr)
+        for error in format_validation_errors(exc.errors):
+            print(error, file=sys.stderr)
+        return 1
     result = validate_script(script, ASSETS_ROOT)
     plans = asset_generation_plans(script)
     effective_models = {

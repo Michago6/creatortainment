@@ -23,6 +23,15 @@ class ValidationResult:
         return not self.errors
 
 
+class ScriptValidationError(ValueError):
+    """A script validation failure retaining Pydantic's structured errors."""
+
+    def __init__(self, path: Path, errors: list[dict[str, Any]]) -> None:
+        self.path = path
+        self.errors = errors
+        super().__init__(f"Script {path} is invalid.")
+
+
 @dataclass(frozen=True)
 class AssetGenerationPlan:
     asset_key: str
@@ -61,8 +70,7 @@ def load_script(path: Path) -> ScriptModel:
     try:
         return ScriptModel.model_validate(value)
     except ValidationError as exc:
-        messages = "; ".join(error["msg"] for error in exc.errors())
-        raise ValueError(f"Script {path} is invalid: {messages}") from exc
+        raise ScriptValidationError(path, exc.errors()) from exc
 
 
 def _index_error(path: str, index: Any, word_count: int) -> str | None:
