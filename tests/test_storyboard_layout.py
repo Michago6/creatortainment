@@ -2,8 +2,11 @@
 
 from PIL import Image, ImageDraw, ImageFont
 
+import creatortainment.render.mock as storyboard_renderer
 from creatortainment.render.mock import (
+    _storyboard_caption_layout,
     caption_box_height,
+    render_storyboard,
     storyboard_panel_size,
     storyboard_sheet_size,
     wrap_caption,
@@ -40,3 +43,80 @@ def test_horizontal_caption_wrapping_uses_available_width() -> None:
 def test_caption_box_includes_text_block_and_bottom_padding() -> None:
     """Caption height leaves room below the final rendered text line."""
     assert caption_box_height(2, line_height=48, padding=24, max_height=400) == 144
+
+
+def test_storyboard_caption_background_is_actually_60_percent_opaque(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    background = Image.new("RGB", (1080, 1920), (100, 150, 200))
+    background_path = tmp_path / "background.png"
+    background.save(background_path)
+    script = {
+        "project": {"resolution": [1080, 1920]},
+        "asset_registry": {
+            "background": {"path": str(background_path), "generate": None},
+        },
+        "scenes": [
+            {
+                "bg": "background",
+                "narration_text": "Short caption",
+                "elements": [],
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        storyboard_renderer,
+        "_asset_path",
+        lambda _registry, _key, _assets_root: background_path,
+    )
+    output = tmp_path / "storyboard.png"
+
+    render_storyboard(script, tmp_path / "assets", output)
+
+    with Image.open(output) as rendered:
+        pixel = rendered.getpixel((rendered.width // 2, rendered.height - 30))
+    assert pixel == (40, 60, 80)
+
+
+def test_long_storyboard_caption_preserves_beginning_and_end() -> None:
+    image = Image.new("RGBA", (1080, 1920))
+    draw = ImageDraw.Draw(image)
+    text = (
+        "Beginning of the narration remains visible while this deliberately "
+        "long caption continues with enough words to exceed three lines and "
+        "ends with the final narration phrase."
+    )
+
+    _, lines, _, _ = _storyboard_caption_layout(
+        text,
+        draw,
+        (1080, 1920),
+        (360, 640),
+        max_caption_height=round(1920 * 0.18),
+        caption_padding=max(24, round(1920 * 0.015)),
+    )
+
+    assert "Beginning" in lines[0]
+    assert "phrase." in lines[-1]
+    assert " ".join(lines) == text
+
+
+def test_short_storyboard_caption_keeps_existing_size_and_layout() -> None:
+    image = Image.new("RGBA", (1080, 1920))
+    draw = ImageDraw.Draw(image)
+    text = "A short storyboard caption stays unchanged."
+
+    font, lines, line_height, box_height = _storyboard_caption_layout(
+        text,
+        draw,
+        (1080, 1920),
+        (360, 640),
+        max_caption_height=round(1920 * 0.18),
+        caption_padding=max(24, round(1920 * 0.015)),
+    )
+
+    assert font.size == 48
+    assert lines == ["A short storyboard caption stays", "unchanged."]
+    assert line_height > 0
+    assert box_height == round(1920 * 0.18)

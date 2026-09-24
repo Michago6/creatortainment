@@ -11,6 +11,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .visual_assets import first_frame_image, visual_dimensions
 
+STORYBOARD_CAPTION_BACKGROUND = (0, 0, 0, 153)
+
 
 def storyboard_panel_size(
     resolution: tuple[int, int], panel_width: int = 360
@@ -107,6 +109,51 @@ def caption_box_height(
     return min(max_height, padding * 2 + line_height * line_count)
 
 
+def _storyboard_caption_layout(
+    text: str,
+    draw: ImageDraw.ImageDraw,
+    canvas_size: tuple[int, int],
+    panel_size: tuple[int, int],
+    max_caption_height: int,
+    caption_padding: int,
+) -> tuple[ImageFont.FreeTypeFont | ImageFont.ImageFont, list[str], int, int]:
+    """Fit all storyboard text, preferring at most three lines."""
+    canvas_width, canvas_height = canvas_size
+    panel_width, _ = panel_size
+    initial_size = max(12, round(canvas_width * 16 / panel_width))
+    minimum_size = max(12, round(initial_size * 0.5))
+    text_x = round(canvas_width * 24 / panel_width)
+    max_width = canvas_width - 2 * text_x
+
+    selected_font = _font(minimum_size)
+    selected_lines = wrap_caption(text, draw, selected_font, max_width)
+    selected_line_height = 0
+    for size in range(initial_size, minimum_size - 1, -1):
+        font = _font(size)
+        lines = wrap_caption(text, draw, font, max_width)
+        text_bbox = draw.textbbox((0, 0), "Ag", font=font)
+        glyph_height = text_bbox[3] - text_bbox[1]
+        line_height = max(
+            glyph_height + caption_padding // 2,
+            round(canvas_height * 0.035),
+        )
+        capacity = max(
+            1,
+            (max_caption_height - 2 * caption_padding) // line_height,
+        )
+        selected_font = font
+        selected_lines = lines
+        selected_line_height = line_height
+        if len(lines) <= 3 and len(lines) <= capacity:
+            break
+
+    box_height = max(
+        max_caption_height,
+        caption_padding * 2 + selected_line_height * len(selected_lines),
+    )
+    return selected_font, selected_lines, selected_line_height, box_height
+
+
 def _place_element(
     panel: Image.Image,
     element: dict[str, Any],
@@ -169,7 +216,6 @@ def render_storyboard(script: dict[str, Any], assets_root: Path, output_path: Pa
     sheet = Image.new("RGB", (columns * panel_width, rows * panel_height), "#20242b")
     canvas_width, canvas_height = canvas_size
     title_font = _font(max(18, round(canvas_width * 24 / panel_width)))
-    body_font = _font(max(12, round(canvas_width * 16 / panel_width)))
     dimension_cache = AssetDimensionCache()
 
     for index, scene in enumerate(scenes):
@@ -212,40 +258,26 @@ def render_storyboard(script: dict[str, Any], assets_root: Path, output_path: Pa
             font=title_font,
         )
         max_caption_height = round(canvas_height * 0.18)
-        text_bbox = draw.textbbox((0, 0), "Ag", font=body_font)
-        glyph_height = text_bbox[3] - text_bbox[1]
         caption_padding = max(24, round(canvas_height * 0.015))
-        line_height = max(
-            glyph_height + caption_padding // 2,
-            round(canvas_height * 0.035),
-        )
         margin_x = round(canvas_width * 12 / panel_width)
         text_x = round(canvas_width * 24 / panel_width)
-        lines = wrap_caption(
+        body_font, lines, line_height, box_height = _storyboard_caption_layout(
             scene["narration_text"],
             draw,
-            body_font,
-            canvas_width - 2 * text_x,
-        )
-        visible_lines = max(
-            1,
-            min(
-                len(lines),
-                max(1, (max_caption_height - 2 * caption_padding) // line_height),
-            ),
-        )
-        lines = lines[-visible_lines:]
-        box_height = caption_box_height(
-            len(lines),
-            line_height,
-            caption_padding,
+            canvas_size,
+            (panel_width, panel_height),
             max_caption_height,
+            caption_padding,
         )
+        text_bbox = draw.textbbox((0, 0), "Ag", font=body_font)
         margin_y = round(canvas_height * 12 / panel_height)
-        draw.rectangle(
+        caption_overlay = Image.new("RGBA", panel.size, (0, 0, 0, 0))
+        caption_draw = ImageDraw.Draw(caption_overlay)
+        caption_draw.rectangle(
             (margin_x, canvas_height - box_height - margin_y, canvas_width - margin_x, canvas_height - margin_y),
-            fill="#000000",
+            fill=STORYBOARD_CAPTION_BACKGROUND,
         )
+        panel.alpha_composite(caption_overlay)
         for line_number, text in enumerate(lines):
             draw.text(
                 (
