@@ -261,6 +261,21 @@ images and audio in `assets/`; generated project files belong in
 
 ## CLI commands
 
+### Scriptwriting workspace
+
+The local `scriptwriting/` workspace provides a separate, gitignored context
+for writing scripts. Production `assets/` remains authoritative; the
+scriptwriting asset library is a curated discovery copy with sidecars and
+indexes. Setup, lifecycle, direct CLI workflow, and bootstrap details are in
+[`docs/SCRIPTWRITING_WORKSPACE.md`](docs/SCRIPTWRITING_WORKSPACE.md).
+
+The tracked [`scriptwriting_template/`](scriptwriting_template/) directory is
+the clean public starting point for creating a local `scriptwriting/`
+workspace. Do not run scripts directly from the template. Copy or use its
+structure to initialize `scriptwriting/`, which is the actual local,
+gitignored workspace used by the scriptwriting agent. It contains generic
+documentation and empty directory placeholders only.
+
 ### Validate
 
 ```bash

@@ -1,15 +1,26 @@
-# creatortainment Script Conventions
+# Creatortainment Script Conventions
 
-This is the **single canonical authoring guide for creatortainment JSON scripts**.
+This is the **single canonical authoring guide for creatortainment JSON scripts**
+from the scriptwriter agent's perspective.
 
-It exists primarily so humans and LLMs have one consistent description of how scripts are supposed to be written. It does **not** itself enforce the rules. The Pydantic schema and validation code are the authoritative enforcement mechanism.
+It exists primarily so humans and LLMs have one consistent description of how
+scripts are supposed to be written. For the scriptwriter agent, this document
+and `SCRIPT_STRUCTURE.md` are the normal authoring references. The actual
+Pydantic schema remains authoritative for the software itself, but the
+scriptwriter agent should rely on the maintained scriptwriting documentation
+when authoring scripts rather than inspecting `creatortainment/` source code,
+tests, or implementation details unless the user explicitly asks.
+
+This document does **not** itself enforce the rules. The software's Pydantic
+schema and validation code are the authoritative enforcement mechanism for the
+application itself.
 
 ## Rule precedence
 
 When information conflicts, use this order:
 
-1. **Current Pydantic schema and validation code** — authoritative for what is valid.
-2. **This document** — canonical authoring convention and explanation of intended behavior.
+1. **Current maintained scriptwriting documentation (`SCRIPT_STRUCTURE.md` and `SCRIPT_CONVENTIONS.md`)** — the normal authoring references for the scriptwriter agent.
+2. **Current Pydantic schema and validation code** — authoritative for software validity.
 3. **Individual JSON scripts** — content only. Any `_conventions` object found inside an individual script is legacy documentation and is not a separate source of truth.
 
 New scripts should **not** duplicate the conventions document inside `_conventions`.
@@ -415,7 +426,7 @@ Example:
 ```json
 "asset_registry": {
   "main_character": {
-    "path": "assets/sprites/mrmouse_relaxed.png",
+    "path": "assets/sprites/narrator_character.png",
     "generate": null
   }
 }
@@ -494,7 +505,7 @@ Generated assets use a structured `generate` block:
   "generation_method": "image_to_image",
   "model": null,
   "description": "Generation prompt...",
-  "source_asset": "mrmouse_reference",
+  "source_asset": "narrator_reference",
   "transparent_background": true
 }
 ```
@@ -698,7 +709,7 @@ Conceptually:
 ```json
 {
   "id": "main_character",
-  "asset": "mrmouse_relaxed",
+  "asset": "narrator_character",
   "z_index": 10,
   "anchor": "bottom_center",
   "keyframes": []
