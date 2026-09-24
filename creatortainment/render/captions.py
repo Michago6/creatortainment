@@ -141,7 +141,7 @@ def render_caption_chunk(
     image = Image.new(
         "RGBA",
         (content_width + 2 * padding_x, content_height + 2 * padding_y),
-        "#000000",
+        (0, 0, 0, 0),
     )
     draw = ImageDraw.Draw(image)
     x = padding_x

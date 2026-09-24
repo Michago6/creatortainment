@@ -6,6 +6,9 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
+import numpy as np
+from moviepy import ColorClip, CompositeVideoClip
+
 from creatortainment.render.moviepy_scene import (
     build_animated_caption_clip,
     build_full_video_clip,
@@ -129,4 +132,45 @@ def test_animated_caption_is_blank_then_advances_and_holds_final_word() -> None:
         assert held.shape[0] > 1
         assert caption.caption_image_cache.render_count >= 2
     finally:
+        caption.close()
+
+
+def test_animated_caption_transparent_padding_preserves_background() -> None:
+    script = _script("example_script.json")
+    scene = script["scenes"][0]
+    scene["narration_text"] = "hello world"
+    scene_manifest = {
+        "start_time_sec": 0.0,
+        "word_offset": 0,
+    }
+    manifest = {
+        "word_timestamps": [
+            {"start": 0.0, "end": 1.0},
+            {"start": 1.0, "end": 2.0},
+        ]
+    }
+    caption = build_animated_caption_clip(
+        script,
+        scene,
+        scene_manifest,
+        manifest,
+        (1080, 1920),
+        2.0,
+    )
+    background = ColorClip((1080, 1920), color=(100, 150, 200), duration=2.0)
+    composite = CompositeVideoClip([background, caption], size=(1080, 1920))
+    try:
+        rendered = caption.get_frame(0.1)
+        alpha = caption.mask.get_frame(0.1)
+        frame = composite.get_frame(0.1)
+        assert alpha[0, 0] == 0.0
+        assert tuple(frame[int(caption.pos(0.1)[1]), int(caption.pos(0.1)[0])]) == (
+            100,
+            150,
+            200,
+        )
+        assert np.max(rendered) == 255
+    finally:
+        composite.close()
+        background.close()
         caption.close()

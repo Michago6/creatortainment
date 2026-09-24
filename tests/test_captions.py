@@ -127,6 +127,7 @@ def test_caption_image_cache_hits_for_consecutive_frames() -> None:
     assert first.image.size[1] > 0
     assert first.position[0] >= 0
     assert first.position[1] >= 0
+    assert first.image.getpixel((0, 0))[3] == 0
 
 
 def test_custom_vertical_position_is_resolution_independent() -> None:

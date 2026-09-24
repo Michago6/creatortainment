@@ -348,7 +348,9 @@ def build_animated_caption_clip(
         rendered, _ = resolve_frame(float(local_time))
         if rendered is None:
             return np.zeros((1, 1), dtype=float)
-        return np.ones((rendered.image.height, rendered.image.width), dtype=float)
+        return (
+            np.asarray(rendered.image.getchannel("A"), dtype=float) / 255.0
+        )
 
     def position(local_time: float) -> tuple[int, int]:
         rendered, _ = resolve_frame(float(local_time))
@@ -396,7 +398,6 @@ def build_static_caption_clip(
         font_size=font_size,
         method="label",
         color=style.get("color", "#FFFFFF"),
-        bg_color="#000000",
         stroke_color=style.get("stroke_color", "#000000"),
         stroke_width=int(style.get("stroke_width", 0)),
         text_align="center",
