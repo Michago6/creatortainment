@@ -233,6 +233,7 @@ A scene follows this conceptual shape:
   "narration_text": "...",
   "caption_style": null,
   "duration_sec": null,
+  "extra_duration_sec": 0.0,
   "pause_before_sec": 0.3,
   "transition_in": null,
   "duck_to_narration_pct": null,
@@ -262,7 +263,27 @@ Do not manually author scene duration based on an estimated reading time.
 
 Computed duration belongs in the build output/manifest, not back in the authored script.
 
-## 5.3 `pause_before_sec`
+## 5.3 `extra_duration_sec`
+
+`extra_duration_sec` is optional and defaults to `0.0`. A positive value keeps
+the scene's final visual state active for that many seconds after the scene's
+narration finishes. The final caption chunk and visual layers remain active;
+no additional narration is generated.
+
+For example:
+
+```json
+"extra_duration_sec": 2.0
+```
+
+keeps the scene on screen for two seconds after narration ends. The authored
+`duration_sec` must remain `null`; the pipeline computes narration duration
+from alignment and adds this hold when building the final timeline.
+
+Zero or omitted `extra_duration_sec` preserves the normal narration-length
+behavior. Values must not be negative.
+
+## 5.4 `pause_before_sec`
 
 `pause_before_sec` **adds** time immediately before the scene's narration.
 

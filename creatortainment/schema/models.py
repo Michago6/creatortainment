@@ -187,6 +187,7 @@ class SceneModel(ScriptModelBase):
     narration_text: str
     caption_style: CaptionStyleModel | None = None
     duration_sec: None = None
+    extra_duration_sec: float = Field(default=0.0, ge=0.0)
     pause_before_sec: float = Field(default=0.3, ge=0.0)
     transition_in: TransitionInModel | None = None
     duck_to_narration_pct: float | None = Field(default=None, gt=0.0, le=1.0)
