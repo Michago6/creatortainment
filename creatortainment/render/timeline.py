@@ -9,10 +9,11 @@ from ..timeline import trigger_time_sec
 
 @dataclass(frozen=True)
 class SceneOffset:
-    """Placement of one scene's narration clip in the final video."""
+    """Logical and visual placement of one scene in the final video."""
 
     scene_index: int
     pause_before_sec: float
+    visual_start_sec: float
     final_start_sec: float
     narration_start_sec: float
     narration_end_sec: float
@@ -40,7 +41,7 @@ def build_scene_final_offsets(
     script: dict[str, Any],
     manifest: dict[str, Any],
 ) -> list[SceneOffset]:
-    """Compute final-video placement including pauses and transition overlaps."""
+    """Compute sequential logical placement and visual transition overlap."""
     scenes = script.get("scenes", [])
     scene_manifests = manifest.get("scenes", [])
     if len(scenes) != len(scene_manifests):
@@ -68,20 +69,22 @@ def build_scene_final_offsets(
                         "available preceding timeline."
                     )
         unit_duration = pause + scene_duration
-        scene_start = cursor - transition
-        narration_start = scene_start + pause
+        logical_start = cursor
+        visual_start = logical_start - transition
+        narration_start = logical_start + pause
         offsets.append(
             SceneOffset(
                 scene_index=index,
                 pause_before_sec=pause,
-                final_start_sec=scene_start,
+                visual_start_sec=visual_start,
+                final_start_sec=logical_start,
                 narration_start_sec=narration_start,
                 narration_end_sec=narration_start + narration_duration,
                 transition_duration_sec=transition,
                 unit_duration_sec=unit_duration,
             )
         )
-        cursor = scene_start + unit_duration
+        cursor = logical_start + unit_duration
     return offsets
 
 

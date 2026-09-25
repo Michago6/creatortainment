@@ -521,11 +521,11 @@ def build_full_video_clip(
             transition,
             outgoing,
             tuple(script["project"]["resolution"]),
-            scene_start_sec=offset.final_start_sec,
+            scene_start_sec=offset.visual_start_sec,
             outgoing_transition_start_sec=outgoing_start,
         )
         positioned.append(
-            unit.with_start(offset.final_start_sec).with_layer_index(layer_indices[index])
+            unit.with_start(offset.visual_start_sec).with_layer_index(layer_indices[index])
         )
         if unit.audio is not None:
             audio_layers.append(unit.audio.with_start(offset.final_start_sec))
