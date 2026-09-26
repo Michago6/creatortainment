@@ -1,0 +1,122 @@
+{
+  "_conventions": {},
+  "project": {
+    "title": "asset_generation_test",
+    "date": "2026-09-22",
+    "tts_model": "eleven_flash_v2_5",
+    "voice_id": "GhkQkxbimoIykF4iGYqh",
+    "duck_to_narration_pct": 0.4,
+    "aspect_ratio": "9:16",
+    "resolution": [
+      1080,
+      1920
+    ],
+    "fps": 30,
+    "generation_defaults": {
+      "text_to_image": "fal-ai/flux-1/schnell",
+      "image_to_image": "fal-ai/flux-1/schnell/redux",
+      "text_to_audio": "mirelo-ai/sfx1.6/text-to-audio",
+      "audio_to_audio": "fal-ai/stable-audio-3/small/sfx/audio-to-audio"
+    },
+    "caption_style": {
+      "font": "Montserrat-Bold",
+      "font_size": 64,
+      "color": "#FFFFFF",
+      "stroke_color": "#000000",
+      "stroke_width": 3,
+      "position": "bottom_center",
+      "max_chars_per_line": 28,
+      "highlight_color": "#FFD700",
+      "highlight_scale": 1.15,
+      "words_per_chunk": 3
+    }
+  },
+  "asset_registry": {
+    "test_text_to_image": {
+      "path": "assets/images/test_generation_text_to_image.png",
+      "generate": {
+        "asset_type": "background",
+        "generation_method": "text_to_image",
+        "model": null,
+        "description": "A simple dark Minecraft-style cave with a torch glowing on a stone wall, portrait composition.",
+        "source_asset": null,
+        "transparent_background": false
+      }
+    },
+    "test_image_to_image": {
+      "path": "assets/images/test_generation_image_to_image.png",
+      "generate": {
+        "asset_type": "sprite",
+        "generation_method": "image_to_image",
+        "model": null,
+        "description": "Transform the supplied MrMinecraft sprite into a Minecraft-themed version while preserving the character's pose and overall composition.",
+        "source_asset": "test_image_to_image_source",
+        "transparent_background": true
+      }
+    },
+    "test_image_to_image_source": {
+      "path": "assets/sprites/mrminecraft_relaxed.png",
+      "generate": null
+    },
+    "test_text_to_audio": {
+      "path": "assets/audio/test_generation_text_to_audio.mp3",
+      "generate": {
+        "asset_type": "sfx",
+        "generation_method": "text_to_audio",
+        "model": null,
+        "description": "A short eerie Minecraft cave ambience with a subtle low rumble.",
+        "source_asset": null,
+        "transparent_background": null
+      }
+    },
+    "test_audio_to_audio": {
+      "path": "assets/audio/test_generation_audio_to_audio.mp3",
+      "generate": {
+        "asset_type": "sfx",
+        "generation_method": "audio_to_audio",
+        "model": null,
+        "description": "Transform the supplied audio into a much scarier, darker, more eerie horror version. Preserve the recognizable core of the original audio and its overall timing, but add an unsettling, ominous, genuinely frightening atmosphere.",
+        "source_asset": "test_audio_to_audio_source",
+        "transparent_background": null
+      }
+    },
+    "test_audio_to_audio_source": {
+      "path": "assets/audio/mojang_please_hire_me_joabi.mp3",
+      "generate": null
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene_1",
+      "bg": "test_text_to_image",
+      "narration_text": "Asset generation test.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "test_character",
+          "asset": "test_image_to_image_source",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1770
+              ],
+              "target_height_frac": 0.34,
+              "opacity": 1,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

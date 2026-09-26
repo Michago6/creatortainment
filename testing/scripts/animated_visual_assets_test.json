@@ -1,0 +1,189 @@
+{
+  "project": {
+    "title": "Animated Visual Assets Test",
+    "date": "2026-09-23",
+    "tts_model": "eleven_flash_v2_5",
+    "voice_id": "GhkQkxbimoIykF4iGYqh",
+    "duck_to_narration_pct": 0.4,
+    "aspect_ratio": "9:16",
+    "resolution": [
+      1080,
+      1920
+    ],
+    "fps": 30,
+    "generation_defaults": {
+      "text_to_image": null,
+      "image_to_image": null,
+      "text_to_audio": null,
+      "audio_to_audio": null
+    },
+    "caption_style": {
+      "font": "Montserrat-Bold",
+      "font_size": 64,
+      "color": "#FFFFFF",
+      "stroke_color": "#000000",
+      "stroke_width": 3,
+      "position": "bottom_center",
+      "max_chars_per_line": 28,
+      "highlight_color": "#FFD700",
+      "highlight_scale": 1.15,
+      "words_per_chunk": 3
+    }
+  },
+  "asset_registry": {
+    "anim_short_gif": {
+      "path": "assets/images/test_animation_short.gif",
+      "generate": null
+    },
+    "anim_long_gif": {
+      "path": "assets/images/test_animation_long.gif",
+      "generate": null
+    },
+    "anim_short_mp4": {
+      "path": "assets/images/test_animation_short.mp4",
+      "generate": null
+    },
+    "anim_long_mp4": {
+      "path": "assets/images/test_animation_long.mp4",
+      "generate": null
+    },
+    "bg_anim_short_gif": {
+      "path": "assets/backgrounds/test_animated_background_short.gif",
+      "generate": null
+    },
+    "bg_anim_long_mp4": {
+      "path": "assets/backgrounds/test_animated_background_long.mp4",
+      "generate": null
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene_1_short_gif",
+      "bg": "bg_anim_short_gif",
+      "narration_text": "This GIF is shorter than the scene, so it should loop.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "short_gif_element",
+          "asset": "anim_short_gif",
+          "z_index": 10,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                960
+              ],
+              "target_height_frac": 0.4,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_2_long_mp4",
+      "bg": "bg_anim_long_mp4",
+      "narration_text": "This MP4 background is much longer, so it should be trimmed to the scene.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "long_mp4_element",
+          "asset": "anim_long_mp4",
+          "z_index": 10,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                960
+              ],
+              "target_height_frac": 0.4,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_3_short_mp4",
+      "bg": "bg_anim_short_gif",
+      "narration_text": "This MP4 element should also loop while the GIF background keeps moving.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "short_mp4_element",
+          "asset": "anim_short_mp4",
+          "z_index": 10,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                960
+              ],
+              "target_height_frac": 0.4,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_4_long_gif",
+      "bg": "bg_anim_long_mp4",
+      "narration_text": "This GIF element is longer than the scene, so it should be trimmed.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "long_gif_element",
+          "asset": "anim_long_gif",
+          "z_index": 10,
+          "anchor": "center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                960
+              ],
+              "target_height_frac": 0.4,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
