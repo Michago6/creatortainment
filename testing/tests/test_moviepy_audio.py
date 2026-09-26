@@ -8,15 +8,15 @@ from pathlib import Path
 from creatortainment.render.moviepy_scene import attach_scene_narration, build_static_scene_clip
 
 
-ROOT = Path(__file__).parents[1]
-ASSETS = ROOT / "assets"
+ROOT = Path(__file__).parents[2]
+ASSETS = ROOT / "testing/assets"
 PROJECT = ROOT / "projects/understanding_gpu_architecture"
 
 
 def test_scene_narration_slice_matches_manifest_duration() -> None:
     """A scene audio slice duration matches its manifest start/end interval."""
     script = json.loads(
-        (ROOT / "scripts/testing_scripts/example_script.json").read_text(encoding="utf-8")
+        (ROOT / "testing/scripts/example_script.json").read_text(encoding="utf-8")
     )
     manifest = json.loads((PROJECT / "build_manifest.json").read_text(encoding="utf-8"))
     scene_manifest = manifest["scenes"][0]

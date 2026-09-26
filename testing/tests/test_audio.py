@@ -16,9 +16,9 @@ from creatortainment.audio.manifest import build_manifest
 from creatortainment.audio.tokenize import tokenize
 
 
-ROOT = Path(__file__).parents[1]
-SCRIPT_PATH = ROOT / "scripts/testing_scripts/example_script.json"
-FIXTURE_PATH = ROOT / "tests/fixtures/mock_elevenlabs_response.json"
+ROOT = Path(__file__).parents[2]
+SCRIPT_PATH = ROOT / "testing/scripts/example_script.json"
+FIXTURE_PATH = ROOT / "testing/tests/fixtures/mock_elevenlabs_response.json"
 
 
 def test_tokenize_preserves_word_boundaries() -> None:

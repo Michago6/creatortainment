@@ -19,13 +19,13 @@ from creatortainment.render.moviepy_scene import (
 )
 
 
-ROOT = Path(__file__).parents[1]
-ASSETS = ROOT / "assets"
+ROOT = Path(__file__).parents[2]
+ASSETS = ROOT / "testing/assets"
 
 
 def _script(name: str) -> dict:
     return json.loads(
-        (ROOT / "scripts/testing_scripts" / name).read_text(encoding="utf-8")
+        (ROOT / "testing/scripts" / name).read_text(encoding="utf-8")
     )
 
 

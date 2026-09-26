@@ -21,7 +21,8 @@ agent. It is gitignored and is where drafts, curated assets, sidecars, and
 agent knowledge belong.
 
 Then populate `scriptwriting/assets/` only with curated copies or links
-appropriate for the local project. Keep production `assets/` authoritative.
+appropriate for the local project. Keep `scriptwriting/assets/` as the
+canonical production asset root.
 The repository's asset-bootstrap tooling can inventory production assets and
 create curated sidecars and indexes when that workflow is used.
 
@@ -37,8 +38,8 @@ copilot --agent scriptwriter
 
 Changing directories provides workflow context, not filesystem security. The
 agent still has shell access. It should prefer files inside `scriptwriting/`
-and should not inspect `creatortainment/`, production `assets/`, `projects/`,
-`tests/`, or unrelated repository files unless the user explicitly asks.
+and should not inspect `creatortainment/`, production assets, `projects/`,
+`testing/`, or unrelated repository files unless the user explicitly asks.
 
 ## Direct CLI workflow
 

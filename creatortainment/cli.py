@@ -43,7 +43,7 @@ from .provider_validation import validate_elevenlabs_values, validate_fal_models
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ASSETS_ROOT = REPO_ROOT / "assets"
+ASSETS_ROOT = REPO_ROOT / "scriptwriting" / "assets"
 PROJECTS_ROOT = REPO_ROOT / "projects"
 
 

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Resumably curate production assets for the scriptwriting workspace."""
+"""Maintain the curated production asset library for scriptwriting."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -13,9 +12,10 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "assets"
 DEST = ROOT / "scriptwriting" / "assets"
 STATE_PATH = DEST / ".bootstrap_state.json"
+GENERATED_FILENAMES = {"inventory.json", ".bootstrap_state.json", "INDEX.md"}
+GENERATED_SUFFIXES = {".md"}
 
 
 def _ffprobe(path: Path) -> dict[str, object]:
@@ -67,9 +67,16 @@ def _metadata(path: Path, relative: Path) -> dict[str, object]:
 
 
 def _category(relative: Path) -> Path:
-    if relative.parts[0] == "audio":
-        return Path("audio") / ("sfx" if "sfx" in relative.parts else "music")
-    return Path(relative.parts[0])
+    return relative.parent
+
+
+def _is_asset_file(path: Path) -> bool:
+    """Return whether a file is a source asset rather than bootstrap output."""
+    if path.name in GENERATED_FILENAMES or path.suffix.lower() in GENERATED_SUFFIXES:
+        return False
+    if any(part.startswith(".") for part in path.relative_to(DEST).parts):
+        return False
+    return path.name != ".gitkeep"
 
 
 def _sidecar_text(metadata: dict[str, object], curated: Path) -> str:
@@ -185,7 +192,7 @@ def _write_indexes(inventory: dict[str, dict[str, object]]) -> None:
         "Generated from the resumable production asset inventory. Discover assets progressively:",
         "`global index → category INDEX.md → individual asset sidecar`.",
         "",
-        "The production `assets/` directory is authoritative; these are curated copies.",
+        "The canonical production asset root is `scriptwriting/assets/`.",
         "Assets have one physical location but may be conceptually useful across categories;",
         "follow related indexes before concluding that an asset is unavailable.",
         "",
@@ -207,23 +214,24 @@ def main() -> int:
     DEST.mkdir(parents=True, exist_ok=True)
     state = json.loads(STATE_PATH.read_text()) if STATE_PATH.is_file() else {}
     inventory: dict[str, dict[str, object]] = {}
-    for source in sorted(path for path in SOURCE.rglob("*") if path.is_file()):
-        relative = source.relative_to(SOURCE)
-        if relative.parts[0] == "testing" or source.name == ".gitkeep":
-            continue
+    for source in sorted(path for path in DEST.rglob("*") if path.is_file() and _is_asset_file(path)):
+        relative = source.relative_to(DEST)
         category = _category(relative)
-        curated = DEST / category / source.name
         key = relative.as_posix()
         metadata = _metadata(source, relative)
         fingerprint = f"{metadata['size_bytes']}:{source.stat().st_mtime_ns}"
         record = state.get(key, {})
-        if args.refresh or record.get("fingerprint") != fingerprint or not curated.is_file():
-            curated.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, curated)
+        curated = source
+        if args.refresh or record.get("fingerprint") != fingerprint:
             sidecar = curated.with_suffix(curated.suffix + ".md")
             sidecar.write_text(_sidecar_text(metadata, category / source.name), encoding="utf-8")
             inspected = _inspect_frames(source, curated) if args.inspect_frames else record.get("inspection", [])
             state[key] = {"fingerprint": fingerprint, "curated": str(curated.relative_to(DEST)), "inspection": inspected}
+        elif args.inspect_frames:
+            state[key] = {
+                **record,
+                "inspection": _inspect_frames(source, curated),
+            }
         metadata["curated"] = str(category / source.name)
         inventory[key] = metadata
     state = {key: state[key] for key in inventory if key in state}

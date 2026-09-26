@@ -14,13 +14,13 @@ from creatortainment.render.captions import (
 from creatortainment.render.moviepy_scene import resolve_caption_style
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 
 
 def _script() -> dict:
     """Load the real portrait example script."""
     return json.loads(
-        (ROOT / "scripts/testing_scripts/example_script.json").read_text(
+        (ROOT / "testing/scripts/example_script.json").read_text(
             encoding="utf-8"
         )
     )

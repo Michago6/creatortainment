@@ -12,7 +12,7 @@ from creatortainment import cli
 from creatortainment.schema.validate import load_script
 
 
-SCRIPT = Path("scripts/testing_scripts/example_script.json")
+SCRIPT = Path("testing/scripts/example_script.json")
 PROJECT_SLUG = cli.project_slug(load_script(SCRIPT)["project"]["title"])
 
 
@@ -21,7 +21,7 @@ def test_storyboard_command_uses_default_project_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(cli, "PROJECTS_ROOT", tmp_path / "projects")
-    monkeypatch.setattr(cli, "ASSETS_ROOT", Path("assets"))
+    monkeypatch.setattr(cli, "ASSETS_ROOT", Path("testing/assets"))
 
     assert cli.storyboard_command(SCRIPT, None) == 0
 
@@ -37,7 +37,7 @@ def test_storyboard_command_supports_output_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(cli, "PROJECTS_ROOT", tmp_path / "projects")
-    monkeypatch.setattr(cli, "ASSETS_ROOT", Path("assets"))
+    monkeypatch.setattr(cli, "ASSETS_ROOT", Path("testing/assets"))
 
     assert cli.storyboard_command(SCRIPT, Path("iterations/second.png")) == 0
 
@@ -81,7 +81,7 @@ def test_storyboard_command_rejects_invalid_script_without_output(
     script_path = tmp_path / "invalid.json"
     script_path.write_text(json.dumps(source), encoding="utf-8")
     monkeypatch.setattr(cli, "PROJECTS_ROOT", tmp_path / "projects")
-    monkeypatch.setattr(cli, "ASSETS_ROOT", Path("assets"))
+    monkeypatch.setattr(cli, "ASSETS_ROOT", Path("testing/assets"))
 
     assert cli.storyboard_command(script_path, None) == 1
     assert not (tmp_path / "projects" / "example_script").exists()

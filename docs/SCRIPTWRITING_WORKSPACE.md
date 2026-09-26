@@ -6,8 +6,10 @@ asset copies, sidecars, storyboard drafts, and learned preferences do not
 become implementation repository history.
 
 The workspace contains authoring docs, `scripts/drafts/`, `scripts/ready/`,
-`scripts/archive/`, curated assets, and `agent_knowledge/`. Production
-`assets/` remains authoritative. Curated assets are copies for discovery and
+`scripts/archive/`, curated assets, and `agent_knowledge/`. The canonical
+production asset root is `scriptwriting/assets/`; scripts retain the
+project-relative `assets/...` registry namespace. Curated asset metadata and
+indexes support discovery and
 their sidecars record the production source; scripts still use production
 `assets/...` registry paths.
 
@@ -21,7 +23,7 @@ copilot
 
 This is a workflow/context boundary, not a security boundary. The agent still
 has shell access, so it should prefer files inside `scriptwriting/` and should
-not inspect `creatortainment/`, production `assets/`, `projects/`, `tests/`, or
+not inspect `creatortainment/`, production assets, `projects/`, `testing/`, or
 unrelated repository files unless the user explicitly asks.
 
 From the repository root, use the normal CLI directly:

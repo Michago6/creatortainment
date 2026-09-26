@@ -13,14 +13,14 @@ from creatortainment.audio.mixing import build_sfx_cues, build_sfx_track
 from creatortainment.render.timeline import build_scene_final_offsets, resolve_cue_to_final_video_time
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 PROJECT = ROOT / "projects/understanding_gpu_architecture"
-ASSETS = ROOT / "assets"
+ASSETS = ROOT / "testing/assets"
 
 
 def _script() -> dict:
     return json.loads(
-        (ROOT / "scripts/testing_scripts/example_script.json").read_text(encoding="utf-8")
+        (ROOT / "testing/scripts/example_script.json").read_text(encoding="utf-8")
     )
 
 

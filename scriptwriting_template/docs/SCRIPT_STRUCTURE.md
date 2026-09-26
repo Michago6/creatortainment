@@ -22,7 +22,8 @@ sections:
   elements, captions, transitions, music, and sound cues.
 
 Scene references use asset-registry keys, not raw filesystem paths. Registry
-paths normally point into the production `assets/` directory.
+paths use the `assets/...` namespace and resolve to the canonical
+`scriptwriting/assets/` production directory.
 
 ## Authoring workflow
 

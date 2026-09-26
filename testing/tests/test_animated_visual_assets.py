@@ -16,15 +16,15 @@ from creatortainment.render.moviepy_scene import build_static_scene_clip
 from creatortainment.render.visual_assets import first_frame_image, load_visual_clip
 
 
-ROOT = Path(__file__).parents[1]
-ASSETS = ROOT / "assets"
-IMAGES = ASSETS / "testing/images"
-BACKGROUNDS = ASSETS / "testing/backgrounds"
+ROOT = Path(__file__).parents[2]
+ASSETS = ROOT / "testing/assets"
+IMAGES = ASSETS / "images"
+BACKGROUNDS = ASSETS / "backgrounds"
 
 
 def _script() -> dict:
     return json.loads(
-        (ROOT / "scripts/testing_scripts/example_script.json").read_text(
+        (ROOT / "testing/scripts/example_script.json").read_text(
             encoding="utf-8"
         )
     )
@@ -130,7 +130,7 @@ def test_animated_gif_and_mp4_backgrounds_cover_fit_and_duration() -> None:
         BACKGROUNDS / "test_animated_background_short.gif",
         BACKGROUNDS / "test_animated_background_long.mp4",
     ):
-        script = _scene_script(f"assets/testing/backgrounds/{path.name}")
+        script = _scene_script(f"assets/backgrounds/{path.name}")
         clip = build_static_scene_clip(
             script,
             script["scenes"][0],
@@ -150,7 +150,7 @@ def test_animated_gif_and_mp4_static_elements_preserve_size_anchor_and_opacity()
         IMAGES / "test_animation_short.gif",
         IMAGES / "test_animation_short.mp4",
     ):
-        script = _scene_script(f"assets/testing/images/{path.name}", element=True)
+        script = _scene_script(f"assets/images/{path.name}", element=True)
         clip = build_static_scene_clip(
             script,
             script["scenes"][0],
@@ -172,7 +172,7 @@ def test_animated_gif_and_mp4_static_elements_preserve_size_anchor_and_opacity()
 def test_keyframe_driven_animated_elements_keep_transformations() -> None:
     script = _script()
     script["asset_registry"]["test_visual"] = {
-        "path": "assets/testing/images/test_animation_short.mp4",
+        "path": "assets/images/test_animation_short.mp4",
         "generate": None,
     }
     scene = script["scenes"][2]
@@ -214,7 +214,7 @@ def test_storyboard_uses_first_frame_for_gif_and_mp4(
         IMAGES / "test_animation_short.gif",
         IMAGES / "test_animation_short.mp4",
     ):
-        script = _scene_script(f"assets/testing/images/{path.name}", element=True)
+        script = _scene_script(f"assets/images/{path.name}", element=True)
         output = tmp_path / f"{path.stem}.png"
         render_storyboard(script, ASSETS, output)
         assert output.is_file()

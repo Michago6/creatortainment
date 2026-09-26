@@ -19,14 +19,14 @@ from creatortainment.schema.models import (
 from creatortainment.schema.validate import load_script, validate_script
 
 
-ROOT = Path(__file__).parents[1]
-SCRIPTS = ROOT / "scripts/testing_scripts"
+ROOT = Path(__file__).parents[2]
+SCRIPTS = ROOT / "testing/scripts"
 
 
 def test_all_testing_scripts_load_as_typed_models() -> None:
     for path in sorted(SCRIPTS.glob("*.json")):
         model = load_script(path)
-        result = validate_script(model, ROOT / "assets")
+        result = validate_script(model, ROOT / "testing/assets")
         assert isinstance(model, ScriptModel)
         assert result.valid, result.errors
 

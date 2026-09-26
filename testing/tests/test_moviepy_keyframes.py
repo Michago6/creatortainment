@@ -13,15 +13,15 @@ from creatortainment.render.moviepy_scene import build_static_scene_clip
 from creatortainment.timeline import timed_element
 
 
-ROOT = Path(__file__).parents[1]
-ASSETS = ROOT / "assets"
+ROOT = Path(__file__).parents[2]
+ASSETS = ROOT / "testing/assets"
 PROJECT = ROOT / "projects/understanding_gpu_architecture"
 
 
 def _script() -> dict:
     """Load the real portrait example script."""
     return json.loads(
-        (ROOT / "scripts/testing_scripts/example_script.json").read_text(
+        (ROOT / "testing/scripts/example_script.json").read_text(
             encoding="utf-8"
         )
     )

@@ -11,6 +11,7 @@ Start with:
 - [`ASSET_INDEX.md`](ASSET_INDEX.md)
 - [`docs/SCRIPT_STRUCTURE.md`](docs/SCRIPT_STRUCTURE.md)
 - [`docs/SCRIPT_CONVENTIONS.md`](docs/SCRIPT_CONVENTIONS.md)
+- [`docs/WRITING_GUIDELINES.md`](docs/WRITING_GUIDELINES.md)
 - [`docs/ASSET_LIBRARY_GUIDELINES.md`](docs/ASSET_LIBRARY_GUIDELINES.md)
 - [`agent_knowledge/INDEX.md`](agent_knowledge/INDEX.md)
 
@@ -29,7 +30,7 @@ From the repository root, use the normal Creatortainment CLI:
 
 This is a workflow/context boundary, not a security boundary; the agent still
 has shell access. Do not inspect or modify `creatortainment/`, production
-`assets/`, `projects/`, `tests/`, or unrelated repository files unless the
+assets, `projects/`, `testing/`, or unrelated repository files unless the
 user explicitly asks. Storyboards may write to `projects/`, but the agent does
 not need to inspect that directory unless explicitly asked.
 

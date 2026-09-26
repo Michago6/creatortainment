@@ -10,13 +10,13 @@ import pytest
 from creatortainment.timeline import trigger_time_sec, timed_element
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 
 
 def _script() -> dict:
     """Load the real portrait example script."""
     return json.loads(
-        (ROOT / "scripts/testing_scripts/example_script.json").read_text(
+        (ROOT / "testing/scripts/example_script.json").read_text(
             encoding="utf-8"
         )
     )

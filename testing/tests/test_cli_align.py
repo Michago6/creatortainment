@@ -10,8 +10,8 @@ from creatortainment.audio.elevenlabs_client import NarrationResult, WordTimesta
 from creatortainment.project_identity import project_state_path
 
 
-ROOT = Path(__file__).parents[1]
-ASSETS = ROOT / "assets"
+ROOT = Path(__file__).parents[2]
+ASSETS = ROOT / "testing/assets"
 
 
 def _script() -> dict:
@@ -27,7 +27,7 @@ def _script() -> dict:
         },
         "asset_registry": {
             "background": {
-                "path": "assets/testing/backgrounds/white_portrait.jpg",
+                "path": "assets/backgrounds/white_portrait.jpg",
                 "generate": None,
             }
         },

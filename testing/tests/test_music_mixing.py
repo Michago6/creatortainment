@@ -22,14 +22,14 @@ from creatortainment.audio.mixing import (
 from creatortainment.render.timeline import build_scene_final_offsets
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 PROJECT = ROOT / "projects/understanding_gpu_architecture"
-ASSETS = ROOT / "assets"
+ASSETS = ROOT / "testing/assets"
 
 
 def _script() -> dict:
     return json.loads(
-        (ROOT / "scripts/testing_scripts/example_script.json").read_text(
+        (ROOT / "testing/scripts/example_script.json").read_text(
             encoding="utf-8"
         )
     )

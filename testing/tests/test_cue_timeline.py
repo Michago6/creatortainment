@@ -13,12 +13,12 @@ from creatortainment.render.timeline import (
 )
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 
 
 def _script() -> dict:
     return json.loads(
-        (ROOT / "scripts/testing_scripts/example_script_extended.json").read_text(
+        (ROOT / "testing/scripts/example_script_extended.json").read_text(
             encoding="utf-8"
         )
     )
