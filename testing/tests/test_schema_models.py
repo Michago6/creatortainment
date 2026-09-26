@@ -125,6 +125,16 @@ def test_extra_duration_rejects_negative_values() -> None:
         ScriptModel.model_validate(script)
 
 
+@pytest.mark.parametrize("rotation", [0, 30, -30, 450])
+def test_element_rotation_accepts_arbitrary_degrees(rotation: float) -> None:
+    script = json.loads(
+        (SCRIPTS / "example_script.json").read_text(encoding="utf-8")
+    )
+    script["scenes"][0]["elements"][0]["rotation"] = rotation
+    model = ScriptModel.model_validate(script)
+    assert model.scenes[0].elements[0].rotation == rotation
+
+
 def _asset_script(entry: object) -> dict:
     return {
         "project": {

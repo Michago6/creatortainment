@@ -82,6 +82,7 @@ class KeyframeModel(ScriptModelBase):
 class ElementModel(ScriptModelBase):
     id: str
     asset: str
+    rotation: float = 0.0
     z_index: int = 0
     anchor: Literal["top_left", "center", "bottom_center"]
     keyframes: list[KeyframeModel] = Field(min_length=1)

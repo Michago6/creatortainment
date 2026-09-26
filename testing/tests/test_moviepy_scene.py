@@ -105,6 +105,34 @@ def test_extra_duration_keeps_scene_visuals_and_final_caption_active() -> None:
         clip.close()
 
 
+@pytest.mark.parametrize("rotation", [0, 30, -30])
+def test_element_rotation_changes_rendered_asset_bounds(rotation: float) -> None:
+    script = _script("example_script.json")
+    script = deepcopy(script)
+    element = next(
+        item for item in script["scenes"][0]["elements"] if item["id"] == "main_character"
+    )
+    element["rotation"] = rotation
+    clip = build_static_scene_clip(
+        script,
+        script["scenes"][0],
+        {"duration_sec": 2.0},
+        ASSETS,
+    )
+    try:
+        element_layer = clip.clips[2]
+        if rotation == 0:
+            assert element_layer.w > 0.0
+            assert element_layer.h == pytest.approx(0.32 * 1920, abs=2)
+        else:
+            assert element_layer.w > 0.0
+            assert element_layer.h > 0.32 * 1920
+        frame = element_layer.get_frame(0.5)
+        assert np.asarray(frame).max() > 0
+    finally:
+        clip.close()
+
+
 def test_full_video_concatenates_all_manifest_scenes_in_order() -> None:
     """The full clip duration equals the sum of all scene durations."""
     script = _script("example_script.json")

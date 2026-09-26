@@ -183,6 +183,9 @@ def _place_element(
         scale = (float(target_width) * canvas_size[0]) / native_width
         target_size = (max(1, round(native_width * scale)), max(1, round(native_height * scale)))
     image = image.resize(target_size, Image.Resampling.LANCZOS)
+    rotation = float(element.get("rotation", 0.0))
+    if rotation:
+        image = image.rotate(rotation, expand=True, resample=Image.Resampling.BICUBIC)
     opacity = max(0.0, min(1.0, float(keyframe.get("opacity", 1.0))))
     if opacity < 1.0:
         alpha = image.getchannel("A").point(lambda value: round(value * opacity))

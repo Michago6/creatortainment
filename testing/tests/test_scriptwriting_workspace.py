@@ -37,7 +37,7 @@ def test_bootstrap_inventory_is_resumable_and_contains_media_metadata() -> None:
     state = json.loads(
         (WORKSPACE / "assets" / ".bootstrap_state.json").read_text(encoding="utf-8")
     )
-    assert len(inventory) == len(state) == 106
+    assert len(inventory) == len(state) == 103
     assert "width" in inventory["backgrounds/default_studio.jpg"]
     assert "fingerprint" in state["backgrounds/default_studio.jpg"]
     assert (
@@ -57,6 +57,6 @@ def test_bootstrap_inventory_uses_canonical_paths_and_state_fingerprints() -> No
     assert inventory["audio/monkeys_spinning_monkeys.mp3"]["curated"] == (
         "audio/monkeys_spinning_monkeys.mp3"
     )
-    assert "sprites/mrmouse_withbg/mrmouse_relaxed.png" in inventory
+    assert not any(key.startswith("sprites/mrmouse_") and "/with" in key for key in inventory)
     assert state["audio/monkeys_spinning_monkeys.mp3"]["fingerprint"]
     assert not (WORKSPACE / "assets" / "audio" / "music").exists()

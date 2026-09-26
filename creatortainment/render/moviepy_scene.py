@@ -74,6 +74,9 @@ def _element_clip(
     else:
         raise ValueError(f"Element {element.get('id', '<unnamed>')} has no target size.")
 
+    rotation = float(element.get("rotation", 0.0))
+    if rotation:
+        image = image.rotated(rotation, expand=True)
     opacity = float(keyframe.get("opacity", 1.0))
     if opacity != 1.0:
         image = image.with_opacity(opacity)
@@ -147,6 +150,9 @@ def _animated_element_clip(
             image = image.resize((width, height), Image.Resampling.LANCZOS)
         else:
             image = source.resize((width, height), Image.Resampling.LANCZOS)
+        rotation = float(element.get("rotation", 0.0))
+        if rotation:
+            image = image.rotate(rotation, expand=True, resample=Image.Resampling.BICUBIC)
         opacity = max(0.0, min(1.0, state["opacity"]))
         if opacity != 1.0:
             alpha = image.getchannel("A").point(lambda value: round(value * opacity))
