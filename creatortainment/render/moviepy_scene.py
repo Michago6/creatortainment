@@ -28,7 +28,7 @@ from ..audio.mixing import build_final_audio_mix
 from .mock import AssetDimensionCache, _asset_path
 from .visual_assets import is_animated_visual, load_visual_clip
 from .keyframes import resolve_element_state
-from .timeline import build_scene_final_offsets
+from .timeline import build_scene_final_offsets, scene_duration_sec
 from ..timeline import timed_element
 
 SOFT_PUSH_FEATHER_FRAC = 0.25
@@ -204,7 +204,7 @@ def build_static_scene_clip(
 ):
     """Build one full-resolution scene with animated element layers."""
     resolution = tuple(script["project"]["resolution"])
-    duration = float(scene_manifest["duration_sec"])
+    duration = scene_duration_sec(scene, scene_manifest)
     registry = script["asset_registry"]
     background_path = _asset_path(registry, scene["bg"], assets_root)
     cache = AssetDimensionCache()
@@ -521,11 +521,11 @@ def build_full_video_clip(
             transition,
             outgoing,
             tuple(script["project"]["resolution"]),
-            scene_start_sec=offset.final_start_sec,
+            scene_start_sec=offset.visual_start_sec,
             outgoing_transition_start_sec=outgoing_start,
         )
         positioned.append(
-            unit.with_start(offset.final_start_sec).with_layer_index(layer_indices[index])
+            unit.with_start(offset.visual_start_sec).with_layer_index(layer_indices[index])
         )
         if unit.audio is not None:
             audio_layers.append(unit.audio.with_start(offset.final_start_sec))

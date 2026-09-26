@@ -1,15 +1,26 @@
-# creatortainment Script Conventions
+# Creatortainment Script Conventions
 
-This is the **single canonical authoring guide for creatortainment JSON scripts**.
+This is the **single canonical authoring guide for creatortainment JSON scripts**
+from the scriptwriter agent's perspective.
 
-It exists primarily so humans and LLMs have one consistent description of how scripts are supposed to be written. It does **not** itself enforce the rules. The Pydantic schema and validation code are the authoritative enforcement mechanism.
+It exists primarily so humans and LLMs have one consistent description of how
+scripts are supposed to be written. For the scriptwriter agent, this document
+and `SCRIPT_STRUCTURE.md` are the normal authoring references. The actual
+Pydantic schema remains authoritative for the software itself, but the
+scriptwriter agent should rely on the maintained scriptwriting documentation
+when authoring scripts rather than inspecting `creatortainment/` source code,
+tests, or implementation details unless the user explicitly asks.
+
+This document does **not** itself enforce the rules. The software's Pydantic
+schema and validation code are the authoritative enforcement mechanism for the
+application itself.
 
 ## Rule precedence
 
 When information conflicts, use this order:
 
-1. **Current Pydantic schema and validation code** — authoritative for what is valid.
-2. **This document** — canonical authoring convention and explanation of intended behavior.
+1. **Current maintained scriptwriting documentation (`SCRIPT_STRUCTURE.md` and `SCRIPT_CONVENTIONS.md`)** — the normal authoring references for the scriptwriter agent.
+2. **Current Pydantic schema and validation code** — authoritative for software validity.
 3. **Individual JSON scripts** — content only. Any `_conventions` object found inside an individual script is legacy documentation and is not a separate source of truth.
 
 New scripts should **not** duplicate the conventions document inside `_conventions`.
@@ -222,6 +233,7 @@ A scene follows this conceptual shape:
   "narration_text": "...",
   "caption_style": null,
   "duration_sec": null,
+  "extra_duration_sec": 0.0,
   "pause_before_sec": 0.3,
   "transition_in": null,
   "duck_to_narration_pct": null,
@@ -251,7 +263,27 @@ Do not manually author scene duration based on an estimated reading time.
 
 Computed duration belongs in the build output/manifest, not back in the authored script.
 
-## 5.3 `pause_before_sec`
+## 5.3 `extra_duration_sec`
+
+`extra_duration_sec` is optional and defaults to `0.0`. A positive value keeps
+the scene's final visual state active for that many seconds after the scene's
+narration finishes. The final caption chunk and visual layers remain active;
+no additional narration is generated.
+
+For example:
+
+```json
+"extra_duration_sec": 2.0
+```
+
+keeps the scene on screen for two seconds after narration ends. The authored
+`duration_sec` must remain `null`; the pipeline computes narration duration
+from alignment and adds this hold when building the final timeline.
+
+Zero or omitted `extra_duration_sec` preserves the normal narration-length
+behavior. Values must not be negative.
+
+## 5.4 `pause_before_sec`
 
 `pause_before_sec` **adds** time immediately before the scene's narration.
 
@@ -415,7 +447,7 @@ Example:
 ```json
 "asset_registry": {
   "main_character": {
-    "path": "assets/sprites/mrmouse_relaxed.png",
+    "path": "assets/sprites/narrator_character.png",
     "generate": null
   }
 }
@@ -494,7 +526,7 @@ Generated assets use a structured `generate` block:
   "generation_method": "image_to_image",
   "model": null,
   "description": "Generation prompt...",
-  "source_asset": "mrmouse_reference",
+  "source_asset": "narrator_reference",
   "transparent_background": true
 }
 ```
@@ -698,7 +730,7 @@ Conceptually:
 ```json
 {
   "id": "main_character",
-  "asset": "mrmouse_relaxed",
+  "asset": "narrator_character",
   "z_index": 10,
   "anchor": "bottom_center",
   "keyframes": []

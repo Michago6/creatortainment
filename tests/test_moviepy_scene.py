@@ -7,6 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
+import pytest
 from moviepy import ColorClip, CompositeVideoClip
 
 from creatortainment.render.moviepy_scene import (
@@ -70,6 +71,40 @@ def test_static_caption_uses_verbatim_scene_narration_and_merged_style() -> None
         clip.close()
 
 
+def test_extra_duration_keeps_scene_visuals_and_final_caption_active() -> None:
+    script = _script("example_script.json")
+    script = deepcopy(script)
+    scene = script["scenes"][0]
+    scene["extra_duration_sec"] = 1.5
+    scene_manifest = {
+        "start_time_sec": 0.0,
+        "end_time_sec": 2.0,
+        "duration_sec": 2.0,
+        "word_offset": 0,
+        "word_count": len(scene["narration_text"].split()),
+    }
+    manifest = {
+        "word_timestamps": [
+            {"start": float(index) * 0.5, "end": float(index + 1) * 0.5}
+            for index in range(scene_manifest["word_count"])
+        ]
+    }
+    clip = build_static_scene_clip(
+        script,
+        scene,
+        scene_manifest,
+        ASSETS,
+        manifest,
+    )
+    try:
+        assert clip.duration == pytest.approx(3.5)
+        assert all(layer.duration == pytest.approx(3.5) for layer in clip.clips)
+        caption = clip.clips[-1]
+        assert caption.get_frame(3.49).shape[0] > 1
+    finally:
+        clip.close()
+
+
 def test_full_video_concatenates_all_manifest_scenes_in_order() -> None:
     """The full clip duration equals the sum of all scene durations."""
     script = _script("example_script.json")
@@ -83,10 +118,6 @@ def test_full_video_concatenates_all_manifest_scenes_in_order() -> None:
         expected = sum(float(scene["duration_sec"]) for scene in manifest["scenes"])
         expected += sum(
             float(scene.get("pause_before_sec", 0.0))
-            for scene in script["scenes"][1:]
-        )
-        expected -= sum(
-            float(scene.get("transition_in", {}).get("duration_sec", 0.0))
             for scene in script["scenes"][1:]
         )
         assert abs(clip.duration - expected) <= 0.01

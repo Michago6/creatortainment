@@ -106,6 +106,25 @@ def test_first_scene_transition_must_be_null() -> None:
         ScriptModel.model_validate(script)
 
 
+def test_extra_duration_defaults_to_zero_and_accepts_positive_values() -> None:
+    script = json.loads(
+        (SCRIPTS / "example_script.json").read_text(encoding="utf-8")
+    )
+    script["scenes"][0].pop("extra_duration_sec", None)
+    assert ScriptModel.model_validate(script).scenes[0].extra_duration_sec == 0.0
+    script["scenes"][0]["extra_duration_sec"] = 2.0
+    assert ScriptModel.model_validate(script).scenes[0].extra_duration_sec == 2.0
+
+
+def test_extra_duration_rejects_negative_values() -> None:
+    script = json.loads(
+        (SCRIPTS / "example_script.json").read_text(encoding="utf-8")
+    )
+    script["scenes"][0]["extra_duration_sec"] = -0.1
+    with pytest.raises(ValidationError):
+        ScriptModel.model_validate(script)
+
+
 def _asset_script(entry: object) -> dict:
     return {
         "project": {
