@@ -19,6 +19,7 @@ from .audio.manifest import (
     narration_hash,
     narration_hash_for_text,
     read_manifest,
+    refresh_cached_manifest_scenes,
     write_manifest,
 )
 from .asset_generation import generate_assets
@@ -362,6 +363,13 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
             "Run align for this script before rendering."
         )
     manifest = read_manifest(manifest_path)
+    try:
+        if refresh_cached_manifest_scenes(script, manifest, project_dir):
+            write_manifest(manifest_path, manifest)
+            if manifest_path != project_dir / "build_manifest.json":
+                write_manifest(project_dir / "build_manifest.json", manifest)
+    except (FileNotFoundError, ValueError) as exc:
+        raise RuntimeError(str(exc)) from exc
     render_script = scale_script_for_preview(script) if preview else script
     clip = build_full_video_clip(render_script, manifest, ASSETS_ROOT, project_dir)
     encoded_clip = prepare_render_clip(
@@ -532,6 +540,12 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
                     for scene in align_scenes(script["scenes"], timestamps)
                 ],
             }
+            refresh_cached_manifest_scenes(
+                script,
+                manifest,
+                project_dir,
+                validate_audio_duration=False,
+            )
             manifest_path = variant_manifest_path(project_dir, script_path)
             write_manifest(manifest_path, manifest)
             write_manifest(project_dir / "build_manifest.json", manifest)

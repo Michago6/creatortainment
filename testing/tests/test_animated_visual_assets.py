@@ -18,8 +18,10 @@ from creatortainment.render.visual_assets import first_frame_image, load_visual_
 
 ROOT = Path(__file__).parents[2]
 ASSETS = ROOT / "testing/assets"
+PRODUCTION_ASSETS = ROOT / "scriptwriting/assets"
 IMAGES = ASSETS / "images"
 BACKGROUNDS = ASSETS / "backgrounds"
+PRODUCTION_IMAGES = PRODUCTION_ASSETS / "images"
 
 
 def _script() -> dict:
@@ -48,6 +50,33 @@ def test_short_gif_loops_to_exact_duration() -> None:
         assert clip.duration == 2.5
         assert clip.audio is None
         assert not np.array_equal(clip.get_frame(0.1), clip.get_frame(1.1))
+    finally:
+        clip.close()
+
+
+def test_existing_two_frame_gifs_animate_with_pillow_timing() -> None:
+    cases = (
+        (PRODUCTION_IMAGES / "slay_satisfaction.gif", 0.3),
+        (PRODUCTION_IMAGES / "cat_shaking_head_no.gif", 0.12),
+    )
+    for path, first_frame_duration in cases:
+        clip = load_visual_clip(path, 1.2)
+        try:
+            first = clip.get_frame(first_frame_duration / 2)
+            second = clip.get_frame(first_frame_duration + 0.01)
+            assert not np.array_equal(first, second)
+            assert np.array_equal(
+                first,
+                clip.get_frame(first_frame_duration * 2 + first_frame_duration / 2),
+            )
+        finally:
+            clip.close()
+
+
+def test_one_frame_gif_remains_static() -> None:
+    clip = load_visual_clip(PRODUCTION_IMAGES / "emoji_saying_but_what_if.gif", 1.2)
+    try:
+        assert np.array_equal(clip.get_frame(0.0), clip.get_frame(1.0))
     finally:
         clip.close()
 
@@ -167,6 +196,29 @@ def test_animated_gif_and_mp4_static_elements_preserve_size_anchor_and_opacity()
             assert element_layer.get_frame(0).shape[0] == round(0.32 * 1920)
         finally:
             clip.close()
+
+
+def test_two_frame_gif_scene_element_preserves_scaling_and_position() -> None:
+    script = _scene_script("assets/images/slay_satisfaction.gif", element=True)
+    clip = build_static_scene_clip(
+        script,
+        script["scenes"][0],
+        {"duration_sec": 1.2},
+        PRODUCTION_ASSETS,
+    )
+    try:
+        element_layer = clip.clips[1]
+        assert element_layer.h == round(0.32 * 1920)
+        assert element_layer.pos(0) == (
+            round(540 - element_layer.w / 2),
+            round(1750 - element_layer.h),
+        )
+        assert not np.array_equal(
+            element_layer.get_frame(0.1),
+            element_layer.get_frame(0.31),
+        )
+    finally:
+        clip.close()
 
 
 def test_keyframe_driven_animated_elements_keep_transformations() -> None:

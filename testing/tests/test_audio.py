@@ -12,7 +12,11 @@ from moviepy import AudioClip, AudioFileClip, CompositeAudioClip
 
 from creatortainment.audio.alignment import align_scenes
 from creatortainment.audio.elevenlabs_client import NarrationResult, WordTimestamp
-from creatortainment.audio.manifest import build_manifest
+from creatortainment.audio.manifest import (
+    build_manifest,
+    narration_hash,
+    refresh_cached_manifest_scenes,
+)
 from creatortainment.audio.tokenize import tokenize
 
 
@@ -197,3 +201,136 @@ def test_manifest_cache_hit_and_narration_cache_miss(tmp_path: Path) -> None:
     _, cached = build_manifest(changed, path, client)
     assert cached is False
     assert client.calls == 2
+
+
+def _cached_manifest_script() -> dict:
+    return {
+        "project": {"tts_model": "eleven_flash_v2_5"},
+        "scenes": [
+            {"id": "one", "narration_text": "Alpha beta."},
+            {"id": "two", "narration_text": "Gamma delta."},
+        ],
+    }
+
+
+def _write_cached_audio(path: Path) -> None:
+    audio = AudioClip(lambda t: [0.0, 0.0], duration=2.0, fps=44100)
+    try:
+        audio.write_audiofile(str(path), fps=44100, codec="pcm_s16le", logger=None)
+    finally:
+        audio.close()
+
+
+def _cached_manifest(script: dict, audio_path: Path) -> dict:
+    timestamps = [
+        {"word": "Alpha", "start": 0.0, "end": 0.3},
+        {"word": "beta.", "start": 0.4, "end": 0.7},
+        {"word": "Gamma", "start": 0.8, "end": 1.1},
+        {"word": "delta.", "start": 1.2, "end": 1.5},
+    ]
+    return {
+        "narration_hash": narration_hash(script),
+        "narration_audio_path": str(audio_path),
+        "word_timestamps": timestamps,
+        "scenes": [
+            {
+                "id": "one",
+                "word_offset": 0,
+                "word_count": 2,
+                "start_time_sec": 0.0,
+                "end_time_sec": 0.8,
+                "duration_sec": 0.8,
+            },
+            {
+                "id": "two",
+                "word_offset": 2,
+                "word_count": 2,
+                "start_time_sec": 0.8,
+                "end_time_sec": 1.5,
+                "duration_sec": 0.7,
+            },
+        ],
+    }
+
+
+def test_cached_manifest_resegments_when_scene_count_changes(tmp_path: Path) -> None:
+    script = _cached_manifest_script()
+    audio_path = tmp_path / "narration.wav"
+    _write_cached_audio(audio_path)
+    manifest = _cached_manifest(script, audio_path)
+    script["scenes"] = [
+        {"id": "one", "narration_text": "Alpha"},
+        {"id": "two", "narration_text": "beta. Gamma"},
+        {"id": "three", "narration_text": "delta."},
+    ]
+    manifest["narration_hash"] = narration_hash(script)
+
+    changed = refresh_cached_manifest_scenes(
+        script,
+        manifest,
+        tmp_path,
+        validate_audio_duration=False,
+    )
+
+    assert changed is True
+    assert [(item["id"], item["word_count"]) for item in manifest["scenes"]] == [
+        ("one", 1),
+        ("two", 2),
+        ("three", 1),
+    ]
+
+
+def test_cached_manifest_resegments_when_scene_boundaries_change(tmp_path: Path) -> None:
+    script = _cached_manifest_script()
+    audio_path = tmp_path / "narration.wav"
+    _write_cached_audio(audio_path)
+    manifest = _cached_manifest(script, audio_path)
+    script["scenes"] = [
+        {"id": "one", "narration_text": "Alpha beta. Gamma"},
+        {"id": "two", "narration_text": "delta."},
+    ]
+    manifest["narration_hash"] = narration_hash(script)
+
+    changed = refresh_cached_manifest_scenes(
+        script,
+        manifest,
+        tmp_path,
+        validate_audio_duration=False,
+    )
+
+    assert changed is True
+    assert [item["word_offset"] for item in manifest["scenes"]] == [0, 3]
+    assert [item["start_time_sec"] for item in manifest["scenes"]] == [0.0, 1.2]
+
+
+def test_cached_manifest_rejects_changed_narration(tmp_path: Path) -> None:
+    script = _cached_manifest_script()
+    audio_path = tmp_path / "narration.wav"
+    _write_cached_audio(audio_path)
+    manifest = _cached_manifest(script, audio_path)
+    script["scenes"][0]["narration_text"] = "Changed."
+
+    with pytest.raises(ValueError, match="does not match"):
+        refresh_cached_manifest_scenes(script, manifest, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda manifest: manifest.update({"word_timestamps": []}),
+        lambda manifest: manifest["word_timestamps"][1].update({"word": "wrong"}),
+        lambda manifest: manifest.update({"narration_audio_path": "missing.wav"}),
+    ],
+)
+def test_cached_manifest_rejects_invalid_or_missing_narration_data(
+    tmp_path: Path,
+    mutate,
+) -> None:
+    script = _cached_manifest_script()
+    audio_path = tmp_path / "narration.wav"
+    _write_cached_audio(audio_path)
+    manifest = _cached_manifest(script, audio_path)
+    mutate(manifest)
+
+    with pytest.raises((ValueError, FileNotFoundError)):
+        refresh_cached_manifest_scenes(script, manifest, tmp_path)
