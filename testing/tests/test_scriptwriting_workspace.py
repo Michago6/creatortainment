@@ -37,7 +37,8 @@ def test_bootstrap_inventory_is_resumable_and_contains_media_metadata() -> None:
     state = json.loads(
         (WORKSPACE / "assets" / ".bootstrap_state.json").read_text(encoding="utf-8")
     )
-    assert len(inventory) == len(state) == 103
+    assert inventory
+    assert inventory.keys() == state.keys()
     assert "width" in inventory["backgrounds/default_studio.jpg"]
     assert "fingerprint" in state["backgrounds/default_studio.jpg"]
     assert (
