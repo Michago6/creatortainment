@@ -17,6 +17,7 @@ from creatortainment.render.moviepy_scene import (
     caption_text_for_scene,
     resolve_caption_style,
 )
+from creatortainment.render.timeline import build_scene_final_offsets
 
 
 ROOT = Path(__file__).parents[2]
@@ -192,6 +193,119 @@ def test_animated_caption_is_blank_then_advances_and_holds_final_word() -> None:
         assert caption.caption_image_cache.render_count >= 2
     finally:
         caption.close()
+
+
+@pytest.mark.parametrize("transition", [0.1, 0.2, 0.3])
+def test_transition_delays_caption_to_logical_scene_start(transition: float) -> None:
+    """Incoming visual overlap does not move an animated caption before narration."""
+    script = _script("example_script.json")
+    script = deepcopy(script)
+    script["scenes"][1]["transition_in"] = {
+        "type": "crossfade",
+        "duration_sec": transition,
+    }
+    script["scenes"][1]["pause_before_sec"] = 0.0
+    scene = script["scenes"][1]
+    scene["narration_text"] = "second"
+    scene["elements"] = []
+    scene_manifest = {
+        "start_time_sec": 1.0,
+        "end_time_sec": 2.0,
+        "duration_sec": 1.0,
+        "word_offset": 0,
+        "word_count": 1,
+    }
+    manifest = {
+        "word_timestamps": [{"word": scene["narration_text"].split()[0], "start": 1.0, "end": 2.0}],
+    }
+    offsets = build_scene_final_offsets(
+        {"scenes": [script["scenes"][0], scene]},
+        {"scenes": [{"duration_sec": 1.0}, scene_manifest]},
+    )
+    clip = build_static_scene_clip(
+        script,
+        scene,
+        scene_manifest,
+        ASSETS,
+        manifest,
+        caption_start_offset_sec=transition,
+    )
+    try:
+        caption = clip.clips[-1]
+        assert offsets[1].visual_start_sec + caption.start == pytest.approx(
+            offsets[1].final_start_sec
+        )
+        assert caption.get_frame(0.0).shape[0] > 1
+    finally:
+        clip.close()
+
+
+def test_transition_caption_delay_preserves_pause_timing() -> None:
+    """A pause still places the caption at the narration start after a transition."""
+    script = _script("example_script.json")
+    script = deepcopy(script)
+    transition = 0.2
+    pause = 0.4
+    script["scenes"][1]["transition_in"] = {
+        "type": "crossfade",
+        "duration_sec": transition,
+    }
+    script["scenes"][1]["pause_before_sec"] = pause
+    scene = script["scenes"][1]
+    scene["narration_text"] = "second"
+    scene["elements"] = []
+    scene_manifest = {
+        "start_time_sec": 1.0,
+        "end_time_sec": 2.0,
+        "duration_sec": 1.0,
+        "word_offset": 0,
+        "word_count": 1,
+    }
+    manifest = {
+        "word_timestamps": [{"word": scene["narration_text"].split()[0], "start": 1.0, "end": 2.0}],
+    }
+    offsets = build_scene_final_offsets(
+        {"scenes": [script["scenes"][0], scene]},
+        {"scenes": [{"duration_sec": 1.0}, scene_manifest]},
+    )
+    clip = build_static_scene_clip(
+        script,
+        scene,
+        scene_manifest,
+        ASSETS,
+        manifest,
+        caption_start_offset_sec=transition,
+    )
+    try:
+        caption = clip.clips[-1]
+        assert offsets[1].visual_start_sec + pause + caption.start == pytest.approx(
+            offsets[1].narration_start_sec
+        )
+    finally:
+        clip.close()
+
+
+def test_hard_cut_caption_starts_at_existing_scene_start() -> None:
+    """Without an incoming transition, captions retain their existing timing."""
+    script = _script("example_script.json")
+    scene = script["scenes"][1]
+    scene["narration_text"] = "second"
+    scene["elements"] = []
+    scene_manifest = {
+        "start_time_sec": 1.0,
+        "end_time_sec": 2.0,
+        "duration_sec": 1.0,
+        "word_offset": 0,
+        "word_count": 1,
+    }
+    manifest = {
+        "word_timestamps": [{"word": scene["narration_text"].split()[0], "start": 1.0, "end": 2.0}],
+    }
+    clip = build_static_scene_clip(script, scene, scene_manifest, ASSETS, manifest)
+    try:
+        assert clip.clips[-1].start == pytest.approx(0.0)
+    finally:
+        clip.close()
 
 
 def test_animated_caption_transparent_padding_preserves_background() -> None:

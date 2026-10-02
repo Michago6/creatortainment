@@ -207,6 +207,8 @@ def build_static_scene_clip(
     scene_manifest: dict[str, Any],
     assets_root: Path,
     manifest: dict[str, Any] | None = None,
+    *,
+    caption_start_offset_sec: float = 0.0,
 ):
     """Build one full-resolution scene with animated element layers."""
     resolution = tuple(script["project"]["resolution"])
@@ -242,18 +244,17 @@ def build_static_scene_clip(
             )
         )
     if manifest is None:
-        layers.append(build_static_caption_clip(script, scene, resolution, duration))
+        caption = build_static_caption_clip(script, scene, resolution, duration)
     else:
-        layers.append(
-            build_animated_caption_clip(
-                script,
-                scene,
-                scene_manifest,
-                manifest,
-                resolution,
-                duration,
-            )
+        caption = build_animated_caption_clip(
+            script,
+            scene,
+            scene_manifest,
+            manifest,
+            resolution,
+            duration,
         )
+    layers.append(caption.with_start(caption_start_offset_sec))
     return CompositeVideoClip(layers, size=resolution).with_duration(duration)
 
 
@@ -473,6 +474,7 @@ def build_full_video_clip(
             scene_manifest,
             assets_root,
             manifest,
+            caption_start_offset_sec=scene_offsets[index].transition_duration_sec,
         )
         narrated_clip = attach_scene_narration(
             scene_clip,
