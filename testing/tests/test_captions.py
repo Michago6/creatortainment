@@ -7,6 +7,7 @@ from pathlib import Path
 
 from creatortainment.render.captions import (
     CaptionImageCache,
+    measure_caption_words,
     render_caption_chunk,
     resolve_active_caption,
     wrap_caption_lines,
@@ -56,6 +57,79 @@ def test_character_cap_splits_before_word_limit() -> None:
         ("exceptionallylongword",),
         ("final",),
     ]
+
+
+def test_rendered_width_falls_back_from_three_words_to_two() -> None:
+    chunks = wrap_caption_lines(
+        "one two three four",
+        words_per_chunk=3,
+        style={"font_size": 48, "stroke_width": 3},
+        resolution=(480, 800),
+    )
+    assert [chunk.words for chunk in chunks] == [
+        ("one", "two"),
+        ("three", "four"),
+    ]
+
+
+def test_rendered_width_falls_back_from_two_words_to_one() -> None:
+    chunks = wrap_caption_lines(
+        "medium medium final",
+        words_per_chunk=2,
+        style={"font_size": 48, "stroke_width": 3},
+        resolution=(320, 568),
+    )
+    assert [chunk.words for chunk in chunks] == [
+        ("medium",),
+        ("medium",),
+        ("final",),
+    ]
+
+
+def test_stroke_changes_caption_fit_decision() -> None:
+    resolution = (480, 800)
+    no_stroke = wrap_caption_lines(
+        "one two three",
+        style={"font_size": 48, "stroke_width": 0},
+        resolution=resolution,
+    )
+    with_stroke = wrap_caption_lines(
+        "one two three",
+        style={"font_size": 48, "stroke_width": 3},
+        resolution=resolution,
+    )
+    assert no_stroke[0].words == ("one", "two", "three")
+    assert [chunk.words for chunk in with_stroke] == [("one", "two"), ("three",)]
+
+
+def test_fitting_rendered_captions_stay_inside_horizontal_margins() -> None:
+    resolution = (480, 800)
+    style = {"font_size": 48, "stroke_width": 3}
+    horizontal_margin = max(24, round(resolution[0] * 0.06))
+    available_width = resolution[0] - 2 * horizontal_margin
+    chunks = wrap_caption_lines(
+        "one two three four five",
+        style=style,
+        resolution=resolution,
+    )
+    for chunk in chunks:
+        rendered = render_caption_chunk(chunk, chunk.word_indices[0], style, resolution)
+        assert rendered.image.width <= available_width
+        assert rendered.position[0] >= horizontal_margin
+        assert rendered.position[0] + rendered.image.width <= resolution[0] - horizontal_margin
+
+
+def test_oversized_single_word_is_kept_as_one_word_chunk() -> None:
+    style = {"font_size": 48, "stroke_width": 3}
+    resolution = (320, 568)
+    chunks = wrap_caption_lines(
+        "exceptionallylongword",
+        style=style,
+        resolution=resolution,
+    )
+    rendered_width = measure_caption_words(chunks[0].words, style, resolution).image_size[0]
+    assert chunks[0].words == ("exceptionallylongword",)
+    assert rendered_width > resolution[0] - 2 * max(24, round(resolution[0] * 0.06))
 
 
 def test_last_chunk_can_be_shorter_than_word_limit() -> None:

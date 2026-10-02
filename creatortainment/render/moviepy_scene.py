@@ -318,6 +318,8 @@ def build_animated_caption_clip(
             if style.get("max_chars_per_line") is not None
             else None
         ),
+        style=style,
+        resolution=resolution,
     )
     timestamps = manifest.get("word_timestamps")
     if not isinstance(timestamps, list):
