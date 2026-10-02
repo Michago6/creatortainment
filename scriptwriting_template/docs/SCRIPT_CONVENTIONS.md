@@ -108,7 +108,7 @@ The project section contains the video-wide defaults:
 {
   "title": "minecraft_is_a_horror_game",
   "date": "2026-09-22",
-  "tts_model": "eleven_flash_v2_5",
+  "tts_model": "eleven_v3",
   "voice_id": "...",
   "duck_to_narration_pct": 0.4,
   "aspect_ratio": "9:16",
@@ -128,13 +128,15 @@ The project section contains the video-wide defaults:
 
 `project.tts_model` selects the ElevenLabs model used for the **single full-video narration generation call**.
 
-The standard/cheap default is:
+The production default is:
 
 ```text
-eleven_flash_v2_5
+eleven_v3
 ```
 
-A script may explicitly choose another valid model when there is a deliberate reason to do so.
+`eleven_flash_v2_5` is reserved for testing. A script may explicitly choose
+another valid model only when there is a deliberate reason or the user
+requests it.
 
 A more expensive model is an explicit override, not the default convention.
 
