@@ -82,6 +82,26 @@ def test_storyboard_command_rejects_invalid_script_without_output(
     script_path.write_text(json.dumps(source), encoding="utf-8")
     monkeypatch.setattr(cli, "PROJECTS_ROOT", tmp_path / "projects")
     monkeypatch.setattr(cli, "ASSETS_ROOT", Path("testing/assets"))
+    opened: list[Path] = []
+    monkeypatch.setattr(cli, "open_with_default_application", opened.append)
 
     assert cli.storyboard_command(script_path, None) == 1
     assert not (tmp_path / "projects" / "example_script").exists()
+    assert opened == []
+
+
+def test_storyboard_success_prompts_and_opens_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opened: list[Path] = []
+    monkeypatch.setattr(cli, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(cli, "ASSETS_ROOT", Path("testing/assets"))
+    monkeypatch.setattr(cli, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "yes")
+    monkeypatch.setattr(cli, "open_with_default_application", opened.append)
+
+    assert cli.storyboard_command(SCRIPT, None) == 0
+
+    assert len(opened) == 1
+    assert opened[0].is_file()

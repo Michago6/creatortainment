@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import shutil
+import subprocess
 import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -52,6 +54,55 @@ from .provider_validation import validate_elevenlabs_values, validate_fal_models
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSETS_ROOT = REPO_ROOT / "scriptwriting" / "assets"
 PROJECTS_ROOT = REPO_ROOT / "projects"
+
+
+def _stdin_is_interactive() -> bool:
+    """Return whether prompting on stdin is safe."""
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except (OSError, ValueError):
+        return False
+
+
+def open_with_default_application(path: Path) -> bool:
+    """Launch a file with the platform's default application without waiting."""
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(path))
+            return True
+        command = ["open", str(path)] if sys.platform == "darwin" else None
+        if command is None:
+            opener = shutil.which("xdg-open")
+            if opener is None:
+                return False
+            command = [opener, str(path)]
+        subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _prompt_to_open_output(path: Path) -> None:
+    """Optionally open a successful output without affecting command success."""
+    if not _stdin_is_interactive():
+        return
+    try:
+        answer = input("Open with default application? [y/N] ").strip().lower()
+    except (EOFError, OSError):
+        return
+    if answer not in {"y", "yes"}:
+        return
+    if not open_with_default_application(path):
+        print(
+            f"Warning: could not open output with the default application: {path}",
+            file=sys.stderr,
+        )
 
 
 def output_timestamp(now: datetime | None = None) -> str:
@@ -411,6 +462,7 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
     print(f"Video render: {destination}")
     if preview:
         print("Preview mode: quarter resolution, reduced frame rate, and fast encoding.")
+    _prompt_to_open_output(destination)
     return 0
 
 
@@ -437,6 +489,7 @@ def storyboard_command(script_path: Path, output: Path | None) -> int:
     render_storyboard(script, ASSETS_ROOT, destination)
     print(f"Project: {project_dir}")
     print(f"Storyboard: {destination}")
+    _prompt_to_open_output(destination)
     return 0
 
 
