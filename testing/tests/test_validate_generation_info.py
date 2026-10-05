@@ -266,3 +266,33 @@ def test_other_voice_provider_errors_remain_distinct(monkeypatch, tmp_path) -> N
     assert errors == [
         "ElevenLabs voice is unavailable: 'restricted-voice' (HTTP 401)"
     ]
+
+
+def test_segment_voice_provider_errors_are_checked(monkeypatch) -> None:
+    import elevenlabs.client
+
+    class FakeElevenLabs:
+        def __init__(self, *, api_key: str) -> None:
+            self.models = SimpleNamespace(
+                list=lambda: [SimpleNamespace(model_id="eleven_v3")]
+            )
+            self.voices = SimpleNamespace(
+                get=lambda voice_id: (
+                    None
+                    if voice_id == "default-voice"
+                    else (_ for _ in ()).throw(RuntimeError("missing"))
+                )
+            )
+
+    monkeypatch.setattr(provider_validation.config, "get_elevenlabs_api_key", lambda: "test-key")
+    monkeypatch.setattr(elevenlabs.client, "ElevenLabs", FakeElevenLabs)
+
+    errors = provider_validation.validate_elevenlabs_values(
+        "eleven_v3",
+        "default-voice",
+        {"segment-voice"},
+    )
+
+    assert errors == [
+        "ElevenLabs voice is unavailable: 'segment-voice' (provider error)"
+    ]

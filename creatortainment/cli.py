@@ -282,11 +282,22 @@ def validate_command(script_path: Path, asset_gen_info: bool = False) -> int:
         plan.effective_model for plan in plans if plan.effective_model is not None
     }
     if not result.errors:
+        normalize_segments = getattr(script, "normalized_narration_segments", None)
+        segment_voice_ids = (
+            {
+                segment.voice_id
+                for segment in normalize_segments()
+                if segment.voice_id != script["project"]["voice_id"]
+            }
+            if callable(normalize_segments)
+            else set()
+        )
         result.errors.extend(
             error
             for error in validate_elevenlabs_values(
                 script["project"]["tts_model"],
                 script["project"]["voice_id"],
+                segment_voice_ids,
             )
         )
         missing_models_error = _group_missing_generation_models(plans)

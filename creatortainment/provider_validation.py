@@ -56,6 +56,7 @@ def _voice_validation_error(voice_id: str, exc: Exception) -> str:
 def validate_elevenlabs_values(
     model_id: str,
     voice_id: str,
+    additional_voice_ids: set[str] | None = None,
 ) -> list[str]:
     try:
         api_key = config.get_elevenlabs_api_key()
@@ -70,10 +71,13 @@ def validate_elevenlabs_values(
         errors: list[str] = []
         if model_id not in model_ids:
             errors.append(f"ElevenLabs model is unavailable: {model_id!r}")
-        try:
-            client.voices.get(voice_id)
-        except Exception as exc:
-            errors.append(_voice_validation_error(voice_id, exc))
+        voice_ids = {voice_id}
+        voice_ids.update(additional_voice_ids or set())
+        for candidate in sorted(voice_ids):
+            try:
+                client.voices.get(candidate)
+            except Exception as exc:
+                errors.append(_voice_validation_error(candidate, exc))
         return errors
     except Exception as exc:
         return [_safe_provider_error("ElevenLabs", exc)]

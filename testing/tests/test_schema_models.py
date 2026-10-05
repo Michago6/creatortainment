@@ -233,6 +233,18 @@ def test_empty_highlight_color_list_is_rejected() -> None:
         ScriptModel.model_validate(script)
 
 
+def test_duplicate_segment_ids_and_non_finite_offsets_are_rejected() -> None:
+    script = _multi_voice_script()
+    script["scenes"][1]["narration_segments"][0]["id"] = "dialogue_1:segment-1"
+    with pytest.raises(ValidationError, match="IDs must be unique"):
+        ScriptModel.model_validate(script)
+
+    script = _multi_voice_script()
+    script["scenes"][0]["narration_segments"][1]["start_offset_sec"] = float("nan")
+    with pytest.raises(ValidationError, match="finite"):
+        ScriptModel.model_validate(script)
+
+
 def test_extra_duration_defaults_to_zero_and_accepts_positive_values() -> None:
     script = json.loads(
         (SCRIPTS / "example_script.json").read_text(encoding="utf-8")

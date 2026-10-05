@@ -143,11 +143,14 @@ manifest:
   scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json
 ```
 
-The script's `project.voice_id` selects the voice. Narration files and their
-alignment sidecars are kept permanently in the stable project folder. If the
-same narration is already available, Creatortainment reuses it instead of
-making another API call. If the project already exists and the narration
-needs to change, the command asks for confirmation.
+The script's `project.voice_id` selects the default voice. Scenes may use
+ordered `narration_segments` for dialogue: each segment can inherit that
+default or specify its own `voice_id`, and local `start_at_word` anchors plus
+signed `start_offset_sec` values can create intentional overlap. Narration
+files and alignment sidecars are kept permanently in the stable project
+folder. If the same narration is already available, Creatortainment reuses it
+instead of making another API call. If the project already exists and the
+narration needs to change, the command asks for confirmation.
 
 For detailed diagnostics:
 
