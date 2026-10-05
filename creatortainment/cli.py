@@ -22,6 +22,12 @@ from .audio.manifest import (
     refresh_cached_manifest_scenes,
     write_manifest,
 )
+from .audio.manifest import build_segment_manifest
+from .audio.segment_cache import (
+    cached_segment_paths,
+    find_cached_segment,
+    write_cached_segment,
+)
 from .asset_generation import generate_assets
 from . import config
 from .project_identity import (
@@ -563,12 +569,50 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
     project_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(script_path, project_dir / "script.json")
     api_key = config.get_elevenlabs_api_key()
-    result = ElevenLabsNarrationClient(
+    client = ElevenLabsNarrationClient(
         api_key,
         voice_id=voice_id,
         model_id=model,
         debug_log=debug_log,
-    ).synthesize(script["scenes"])
+    )
+    normalized_segments = script.normalized_narration_segments()
+    if any(scene.narration_segments is not None for scene in script.scenes):
+        narrations_dir = project_dir / "narrations"
+        segment_results = []
+        segment_audio_paths = []
+        generated = 0
+        reused = 0
+        for segment in normalized_segments:
+            cached_segment = find_cached_segment(narrations_dir, segment, model)
+            if cached_segment is not None:
+                segment_results.append(cached_segment)
+                segment_audio_paths.append(
+                    cached_segment_paths(narrations_dir, segment, model)[0]
+                )
+                reused += 1
+                continue
+            result = client.synthesize_segments([segment])[0]
+            audio_path, _ = write_cached_segment(narrations_dir, result, model)
+            segment_results.append(result)
+            segment_audio_paths.append(audio_path)
+            generated += 1
+        manifest = build_segment_manifest(
+            script,
+            project_dir / "build_manifest.json",
+            project_dir,
+            segment_results,
+            segment_audio_paths,
+            model,
+        )
+        write_manifest(variant_manifest_path(project_dir, script_path), manifest)
+        print(
+            f"Generated {generated} narration segment(s); "
+            f"reused {reused} cached segment(s)."
+        )
+        print(f"Updated manifest: {project_dir / 'build_manifest.json'}")
+        return 0
+
+    result = client.synthesize(script["scenes"])
     now = datetime.now(timezone.utc)
     compact = now.strftime("%Y%m%dT%H%M%S%fZ")
     short_hash = incoming_hash[:12]

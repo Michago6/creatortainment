@@ -271,10 +271,10 @@ def resolve_active_caption(
     all_indices = [index for chunk in wrapped_lines for index in chunk.word_indices]
     if not all_indices:
         return None
-    starts = [
-        float(word_timestamps[word_offset + index]["start"])
-        for index in all_indices
+    local_timestamps = [
+        word_timestamps[word_offset + index] for index in all_indices
     ]
+    starts = [float(timestamp["start"]) for timestamp in local_timestamps]
     if absolute_time_sec < starts[0]:
         return None
     active_position = 0
@@ -288,3 +288,43 @@ def resolve_active_caption(
         if active_local_index in chunk.word_indices:
             return chunk_index, active_local_index
     raise ValueError(f"Word index {active_local_index} is not present in caption chunks.")
+
+
+def resolve_active_caption_track(
+    absolute_time_sec: float,
+    chunks: list[CaptionChunk],
+    timestamps: list[dict[str, Any]],
+) -> tuple[int, int] | None:
+    """Resolve one speaker track using its absolute word timestamps."""
+    if not chunks or not timestamps:
+        return None
+    all_indices = [index for chunk in chunks for index in chunk.word_indices]
+    if not all_indices:
+        return None
+    starts = [float(timestamps[index]["start"]) for index in all_indices]
+    if absolute_time_sec < starts[0]:
+        return None
+    active_position = max(
+        position
+        for position, start in enumerate(starts)
+        if absolute_time_sec >= start
+    )
+    active_index = all_indices[active_position]
+    for chunk_index, chunk in enumerate(chunks):
+        if active_index in chunk.word_indices:
+            return chunk_index, active_index
+    raise ValueError(f"Word index {active_index} is not present in caption chunks.")
+
+
+def highlight_color_for_voice(
+    style: dict[str, Any],
+    voice_id: str,
+    voice_order: list[str],
+) -> str:
+    """Resolve a deterministic highlight color for a voice."""
+    configured = style.get("highlight_color")
+    if isinstance(configured, str):
+        return configured
+    if not isinstance(configured, list) or not configured:
+        return style.get("color", "#FFFFFF")
+    return str(configured[voice_order.index(voice_id) % len(configured)])

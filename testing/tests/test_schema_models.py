@@ -106,6 +106,133 @@ def test_first_scene_transition_must_be_null() -> None:
         ScriptModel.model_validate(script)
 
 
+def test_legacy_narration_text_normalizes_to_one_default_voice_segment() -> None:
+    script = json.loads(
+        (SCRIPTS / "example_script.json").read_text(encoding="utf-8")
+    )
+    model = ScriptModel.model_validate(script)
+
+    segments = model.normalized_narration_segments()
+    assert segments[0].text == model.scenes[0].narration_text
+    assert segments[0].voice_id == model.project.voice_id
+    assert segments[0].id == f"{model.scenes[0].id}:segment-1"
+
+
+def _multi_voice_script() -> dict:
+    script = json.loads(
+        (SCRIPTS / "example_script.json").read_text(encoding="utf-8")
+    )
+    script["scenes"] = [
+        {
+            "id": "dialogue_1",
+            "bg": script["scenes"][0]["bg"],
+            "narration_segments": [
+                {"text": "Hello there.", "voice_id": "voice_a"},
+                {"text": "Hi!", "voice_id": "voice_b"},
+            ],
+            "transition_in": None,
+        },
+        {
+            "id": "dialogue_2",
+            "bg": script["scenes"][1]["bg"],
+            "narration_segments": [
+                {"text": "Welcome back."},
+                {"text": "Thanks.", "voice_id": "voice_b"},
+            ],
+            "transition_in": None,
+        },
+    ]
+    return script
+
+
+def test_multiple_voice_scenes_normalize_in_order_with_inherited_voice() -> None:
+    script = _multi_voice_script()
+    script["project"]["voice_id"] = "voice_default"
+    model = ScriptModel.model_validate(script)
+
+    segments = model.normalized_narration_segments()
+    assert [(segment.scene_id, segment.text, segment.voice_id) for segment in segments] == [
+        ("dialogue_1", "Hello there.", "voice_a"),
+        ("dialogue_1", "Hi!", "voice_b"),
+        ("dialogue_2", "Welcome back.", "voice_default"),
+        ("dialogue_2", "Thanks.", "voice_b"),
+    ]
+
+
+def test_explicit_segment_ids_are_preserved_and_missing_ids_are_deterministic() -> None:
+    script = _multi_voice_script()
+    script["scenes"][0]["narration_segments"][0]["id"] = "opening-line"
+    model = ScriptModel.model_validate(script)
+
+    first = model.normalized_narration_segments()
+    second = model.normalized_narration_segments()
+    assert [segment.id for segment in first] == [
+        "opening-line",
+        "dialogue_1:segment-2",
+        "dialogue_2:segment-1",
+        "dialogue_2:segment-2",
+    ]
+    assert [segment.id for segment in first] == [segment.id for segment in second]
+
+
+@pytest.mark.parametrize(
+    "scene_update, expected",
+    [
+        (
+            {"narration_text": "Hello.", "narration_segments": [{"text": "Hi."}]},
+            "exactly one",
+        ),
+        ({"narration_text": "   "}, "non-empty"),
+        ({"narration_segments": []}, "at least one"),
+        ({"narration_segments": [{"text": "   "}]}, "non-empty"),
+        ({"narration_segments": [{"text": "Hello.", "voice_id": ""}]}, "at least 1"),
+    ],
+)
+def test_invalid_narration_definitions_are_rejected(
+    scene_update: dict,
+    expected: str,
+) -> None:
+    script = _multi_voice_script()
+    scene = script["scenes"][0]
+    scene.pop("narration_segments", None)
+    scene.update(scene_update)
+    with pytest.raises(ValidationError, match=expected):
+        ScriptModel.model_validate(script)
+
+
+def test_local_anchor_requires_valid_preceding_or_explicit_reference() -> None:
+    script = _multi_voice_script()
+    script["scenes"][0]["narration_segments"][1]["start_at_word"] = 1
+    script["scenes"][0]["narration_segments"][1]["relative_to"] = "missing"
+    with pytest.raises(ValidationError, match="unknown segment"):
+        ScriptModel.model_validate(script)
+
+    script["scenes"][0]["narration_segments"][1]["relative_to"] = "dialogue_1:segment-2"
+    with pytest.raises(ValidationError, match="cannot reference itself"):
+        ScriptModel.model_validate(script)
+
+
+def test_first_segment_cannot_use_implicit_local_anchor() -> None:
+    script = _multi_voice_script()
+    script["scenes"][0]["narration_segments"][0]["start_at_word"] = 1
+    with pytest.raises(ValidationError, match="without a preceding"):
+        ScriptModel.model_validate(script)
+
+
+def test_local_anchor_is_one_based() -> None:
+    script = _multi_voice_script()
+    script["scenes"][0]["narration_segments"][1]["start_at_word"] = 0
+    with pytest.raises(ValidationError):
+        ScriptModel.model_validate(script)
+
+
+def test_empty_highlight_color_list_is_rejected() -> None:
+    script = _multi_voice_script()
+    script["project"]["caption_style"] = {"highlight_color": []}
+    with pytest.raises(ValidationError, match="at least one"):
+        ScriptModel.model_validate(script)
+
+
 def test_extra_duration_defaults_to_zero_and_accepts_positive_values() -> None:
     script = json.loads(
         (SCRIPTS / "example_script.json").read_text(encoding="utf-8")

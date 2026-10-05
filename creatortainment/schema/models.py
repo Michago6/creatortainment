@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+import math
 from typing import Annotated, Any, Literal
 
 try:
@@ -47,10 +49,16 @@ class CaptionStyleModel(ScriptModelBase):
     stroke_width: int | None = None
     position: Literal["top_left", "center", "bottom_center"] | None = None
     max_chars_per_line: int | None = None
-    highlight_color: str | None = None
+    highlight_color: str | list[str] | None = None
     highlight_scale: float | None = None
     words_per_chunk: int | None = Field(default=None, gt=0)
     vertical_position_frac: float | None = Field(default=None, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_highlight_colors(self) -> "CaptionStyleModel":
+        if isinstance(self.highlight_color, list) and not self.highlight_color:
+            raise ValueError("highlight_color must contain at least one color")
+        return self
 
 
 class KeyframeModel(ScriptModelBase):
@@ -166,6 +174,40 @@ class AssetRegistryEntryModel(ScriptModelBase):
     generate: AssetGenerationModel | None = None
 
 
+class NarrationSegmentModel(ScriptModelBase):
+    id: str | None = Field(default=None, min_length=1)
+    text: str = Field(min_length=1)
+    voice_id: str | None = Field(default=None, min_length=1)
+    relative_to: str | None = Field(default=None, min_length=1)
+    start_at_word: int | None = Field(default=None, ge=1)
+    start_offset_sec: float = 0.0
+
+    @model_validator(mode="after")
+    def validate_text(self) -> "NarrationSegmentModel":
+        if not self.text.strip():
+            raise ValueError("narration segment text must be a non-empty string")
+        if self.voice_id is not None and not self.voice_id.strip():
+            raise ValueError("narration segment voice_id must be a non-empty string")
+        if not math.isfinite(self.start_offset_sec):
+            raise ValueError("narration segment start_offset_sec must be finite")
+        if self.start_at_word is None and self.relative_to is not None:
+            raise ValueError("relative_to requires start_at_word")
+        return self
+
+
+@dataclass(frozen=True)
+class NarrationSegment:
+    id: str
+    scene_id: str
+    text: str
+    voice_id: str
+    scene_index: int
+    segment_index: int
+    relative_to: str | None = None
+    start_at_word: int | None = None
+    start_offset_sec: float = 0.0
+
+
 class ProjectModel(ScriptModelBase):
     title: str
     date: str | None = None
@@ -181,11 +223,18 @@ class ProjectModel(ScriptModelBase):
     duck_to_narration_pct: float = Field(default=0.3, gt=0.0, le=1.0)
     caption_style: CaptionStyleModel | None = None
 
+    @model_validator(mode="after")
+    def validate_voice_id(self) -> "ProjectModel":
+        if not self.voice_id.strip():
+            raise ValueError("project voice_id must be a non-empty string")
+        return self
+
 
 class SceneModel(ScriptModelBase):
     id: str
     bg: str
-    narration_text: str
+    narration_text: str | None = None
+    narration_segments: list[NarrationSegmentModel] | None = None
     caption_style: CaptionStyleModel | None = None
     duration_sec: None = None
     extra_duration_sec: float = Field(default=0.0, ge=0.0)
@@ -195,6 +244,52 @@ class SceneModel(ScriptModelBase):
     bg_music: BgMusicModel | None = None
     sfx: list[SfxCueModel] = Field(default_factory=list)
     elements: list[ElementModel] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_narration_definition(self) -> "SceneModel":
+        has_text = self.narration_text is not None
+        has_segments = self.narration_segments is not None
+        if has_text == has_segments:
+            raise ValueError(
+                "a scene must define exactly one of narration_text or narration_segments"
+            )
+        if has_text and not self.narration_text.strip():
+            raise ValueError("narration_text must be a non-empty string")
+        if has_segments and not self.narration_segments:
+            raise ValueError("narration_segments must contain at least one segment")
+        return self
+
+    def normalized_narration_segments(
+        self,
+        default_voice_id: str,
+        scene_index: int,
+    ) -> list[NarrationSegment]:
+        if self.narration_text is not None:
+            return [
+                NarrationSegment(
+                    id=f"{self.id}:segment-1",
+                    scene_id=self.id,
+                    text=self.narration_text,
+                    voice_id=default_voice_id,
+                    scene_index=scene_index,
+                    segment_index=0,
+                )
+            ]
+        assert self.narration_segments is not None
+        return [
+            NarrationSegment(
+                id=segment.id or f"{self.id}:segment-{segment_index + 1}",
+                scene_id=self.id,
+                text=segment.text,
+                voice_id=segment.voice_id or default_voice_id,
+                scene_index=scene_index,
+                segment_index=segment_index,
+                relative_to=segment.relative_to,
+                start_at_word=segment.start_at_word,
+                start_offset_sec=segment.start_offset_sec,
+            )
+            for segment_index, segment in enumerate(self.narration_segments)
+        ]
 
 
 class ScriptModel(ScriptModelBase):
@@ -228,4 +323,61 @@ class ScriptModel(ScriptModelBase):
     def validate_scene_order(self) -> "ScriptModel":
         if self.scenes[0].transition_in is not None:
             raise ValueError("scenes[0].transition_in must be null")
+        self.normalized_narration_segments()
+        segments = self.normalized_narration_segments()
+        by_id = {segment.id: segment for segment in segments}
+        for index, segment in enumerate(segments):
+            if segment.start_at_word is None:
+                continue
+            reference_id = segment.relative_to
+            if reference_id is None:
+                if segment.segment_index == 0:
+                    raise ValueError(
+                        f"narration segment {segment.id!r} cannot anchor without a preceding segment"
+                    )
+                reference_id = next(
+                    item.id
+                    for item in segments
+                    if item.scene_id == segment.scene_id
+                    and item.segment_index == segment.segment_index - 1
+                )
+                if by_id[reference_id].scene_id != segment.scene_id:
+                    raise ValueError(
+                        f"narration segment {segment.id!r} has an invalid implicit anchor"
+                    )
+            reference = by_id.get(reference_id)
+            if reference is None:
+                raise ValueError(
+                    f"narration segment {segment.id!r} references unknown segment {reference_id!r}"
+                )
+            if reference.id == segment.id:
+                raise ValueError(
+                    f"narration segment {segment.id!r} cannot reference itself"
+                )
+            if segments.index(reference) >= index:
+                raise ValueError(
+                    f"narration segment {segment.id!r} must reference a preceding segment"
+                )
         return self
+
+    def normalized_narration_segments(self) -> list[NarrationSegment]:
+        segments: list[NarrationSegment] = []
+        segment_ids: set[str] = set()
+        for scene_index, scene in enumerate(self.scenes):
+            scene_segments = scene.normalized_narration_segments(
+                self.project.voice_id,
+                scene_index,
+            )
+            duplicate_ids = {
+                segment.id for segment in scene_segments if segment.id in segment_ids
+            }
+            if duplicate_ids:
+                raise ValueError(
+                    "narration segment IDs must be unique: "
+                    + ", ".join(sorted(duplicate_ids))
+                )
+            segment_ids.update(segment.id for segment in scene_segments)
+            segments.extend(
+                scene_segments
+            )
+        return segments

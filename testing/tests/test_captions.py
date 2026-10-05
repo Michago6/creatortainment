@@ -7,9 +7,11 @@ from pathlib import Path
 
 from creatortainment.render.captions import (
     CaptionImageCache,
+    highlight_color_for_voice,
     measure_caption_words,
     render_caption_chunk,
     resolve_active_caption,
+    resolve_active_caption_track,
     wrap_caption_lines,
 )
 from creatortainment.render.moviepy_scene import resolve_caption_style
@@ -43,6 +45,25 @@ def test_chunk_exactly_hits_words_per_chunk() -> None:
         ("one", "two", "three"),
         ("four",),
     ]
+
+
+def test_voice_colors_are_deterministic_and_cycle() -> None:
+    style = {"highlight_color": ["#a", "#b"]}
+    voices = ["voice-a", "voice-b", "voice-c"]
+    assert highlight_color_for_voice(style, "voice-a", voices) == "#a"
+    assert highlight_color_for_voice(style, "voice-b", voices) == "#b"
+    assert highlight_color_for_voice(style, "voice-c", voices) == "#a"
+    assert highlight_color_for_voice({"highlight_color": "#gold"}, "voice-a", voices) == "#gold"
+
+
+def test_caption_track_resolves_its_own_active_word() -> None:
+    chunks = wrap_caption_lines("one two", words_per_chunk=3)
+    timestamps = [
+        {"word": "one", "start": 1.0, "end": 1.3},
+        {"word": "two", "start": 1.3, "end": 1.6},
+    ]
+    assert resolve_active_caption_track(1.1, chunks, timestamps) == (0, 0)
+    assert resolve_active_caption_track(1.4, chunks, timestamps) == (0, 1)
 
 
 def test_character_cap_splits_before_word_limit() -> None:

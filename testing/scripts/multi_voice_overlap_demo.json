@@ -1,0 +1,95 @@
+{
+  "project": {
+    "title": "Multi Voice Overlap Stage 5 Demo",
+    "date": "2026-10-05",
+    "tts_model": "eleven_flash_v2_5",
+    "voice_id": "GhkQkxbimoIykF4iGYqh",
+    "aspect_ratio": "9:16",
+    "resolution": [1080, 1920],
+    "fps": 30,
+    "caption_style": {
+      "font": "Montserrat-Bold",
+      "font_size": 64,
+      "color": "#FFFFFF",
+      "stroke_color": "#000000",
+      "stroke_width": 3,
+      "position": "bottom_center",
+      "max_chars_per_line": 28,
+      "highlight_color": [
+        "#FFD700",
+        "#66CCFF"
+      ],
+      "highlight_scale": 1.15,
+      "words_per_chunk": 3
+    }
+  },
+  "asset_registry": {
+    "demo_background": {
+      "path": "assets/backgrounds/default_studio.jpg",
+      "generate": null
+    }
+  },
+  "scenes": [
+    {
+      "id": "exact_sync",
+      "bg": "demo_background",
+      "narration_segments": [
+        {
+          "id": "sync_a",
+          "text": "Welcome!",
+          "voice_id": "DfyC3OvvfERKzYGchkdL"
+        },
+        {
+          "id": "sync_b",
+          "text": "Welcome!",
+          "voice_id": "GhkQkxbimoIykF4iGYqh",
+          "start_at_word": 1
+        }
+      ],
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "elements": []
+    },
+    {
+      "id": "staggered_start",
+      "bg": "demo_background",
+      "narration_segments": [
+        {
+          "id": "stagger_a",
+          "text": "Listen closely.",
+          "voice_id": "DfyC3OvvfERKzYGchkdL"
+        },
+        {
+          "id": "stagger_b",
+          "text": "Listen closely.",
+          "voice_id": "GhkQkxbimoIykF4iGYqh",
+          "start_at_word": 1,
+          "start_offset_sec": 0.2
+        }
+      ],
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "elements": []
+    },
+    {
+      "id": "interruption",
+      "bg": "demo_background",
+      "narration_segments": [
+        {
+          "id": "interrupt_a",
+          "text": "Voice A speaks until the final word.",
+          "voice_id": "DfyC3OvvfERKzYGchkdL"
+        },
+        {
+          "id": "interrupt_b",
+          "text": "I interrupt now.",
+          "voice_id": "GhkQkxbimoIykF4iGYqh",
+          "start_at_word": 7
+        }
+      ],
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "elements": []
+    }
+  ]
+}

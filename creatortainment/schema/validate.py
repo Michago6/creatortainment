@@ -174,9 +174,11 @@ def validate_script(
 
     for scene_number, scene in enumerate(model.scenes, start=1):
         prefix = f"scenes[{scene_number - 1}]"
-        words = tokenize(scene.narration_text)
-        if not scene.narration_text.strip():
-            errors.append(f"{prefix}.narration_text must be a non-empty string.")
+        scene_segments = scene.normalized_narration_segments(
+            model.project.voice_id,
+            scene_number - 1,
+        )
+        words = tokenize(" ".join(segment.text for segment in scene_segments))
         if scene.bg not in model.asset_registry:
             errors.append(f"{prefix}.bg={scene.bg!r} is not declared in asset_registry.")
         music = scene.bg_music
