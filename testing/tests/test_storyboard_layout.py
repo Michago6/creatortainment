@@ -5,6 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 import creatortainment.render.mock as storyboard_renderer
 from creatortainment.render.mock import (
     _storyboard_caption_layout,
+    _storyboard_caption_tracks,
     caption_box_height,
     render_storyboard,
     storyboard_panel_size,
@@ -120,3 +121,66 @@ def test_short_storyboard_caption_keeps_existing_size_and_layout() -> None:
     assert lines == ["A short storyboard caption stays", "unchanged."]
     assert line_height > 0
     assert box_height == round(1920 * 0.18)
+
+
+def _multi_voice_storyboard_script() -> dict:
+    return {
+        "project": {
+            "resolution": [1080, 1920],
+            "voice_id": "voice-default",
+        },
+        "asset_registry": {"background": {"path": "assets/backgrounds/default_studio.jpg"}},
+        "scenes": [
+            {
+                "id": "dialogue",
+                "bg": "background",
+                "narration_segments": [
+                    {"id": "a", "text": "First speaker line.", "voice_id": "voice-a"},
+                    {"id": "b", "text": "Second speaker line."},
+                ],
+                "elements": [],
+            }
+        ],
+    }
+
+
+def test_segment_only_storyboard_uses_separate_effective_voice_tracks() -> None:
+    tracks = _storyboard_caption_tracks(_multi_voice_storyboard_script(), _multi_voice_storyboard_script()["scenes"][0])
+    assert tracks == [
+        ("voice-a", "First speaker line."),
+        ("voice-default", "Second speaker line."),
+    ]
+
+
+def test_multi_voice_storyboard_renders_stacked_tracks_and_keeps_bounds(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    background = Image.new("RGB", (1080, 1920), (100, 150, 200))
+    background_path = tmp_path / "background.png"
+    background.save(background_path)
+    script = _multi_voice_storyboard_script()
+    monkeypatch.setattr(
+        storyboard_renderer,
+        "_asset_path",
+        lambda _registry, _key, _assets_root: background_path,
+    )
+
+    output = tmp_path / "storyboard.png"
+    render_storyboard(script, tmp_path / "assets", output)
+
+    with Image.open(output) as rendered:
+        assert rendered.size == (1080, 1920)
+        assert rendered.getbbox() == (0, 0, 1080, 1920)
+
+    tracks = _storyboard_caption_tracks(script, script["scenes"][0])
+    image = Image.new("RGBA", (1080, 1920))
+    draw = ImageDraw.Draw(image)
+    max_width = 1080 - 2 * round(1080 * 24 / 360)
+    for _voice_id, text in tracks:
+        lines = wrap_caption(text, draw, ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 48
+        ), max_width)
+        assert all(draw.textlength(line, font=ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 48
+        )) <= max_width for line in lines)
