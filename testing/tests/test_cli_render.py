@@ -87,7 +87,7 @@ def test_open_prompt_accepts_yes_and_uses_exact_path(monkeypatch, tmp_path: Path
     assert opened == [tmp_path / "video.mp4"]
 
 
-def test_open_prompt_does_not_open_for_default_or_no(monkeypatch, tmp_path: Path) -> None:
+def test_open_prompt_opens_for_default_and_skips_no(monkeypatch, tmp_path: Path) -> None:
     opened: list[Path] = []
     monkeypatch.setattr("creatortainment.cli._stdin_is_interactive", lambda: True)
     monkeypatch.setattr("creatortainment.cli.open_with_default_application", opened.append)
@@ -96,7 +96,7 @@ def test_open_prompt_does_not_open_for_default_or_no(monkeypatch, tmp_path: Path
     for answer in ("", "n", "no"):
         monkeypatch.setattr("builtins.input", lambda _prompt, answer=answer: answer)
         cli._prompt_to_open_output(tmp_path / "video.mp4")
-    assert opened == []
+    assert opened == [tmp_path / "video.mp4"]
 
 
 def test_open_failure_is_nonfatal(monkeypatch, tmp_path: Path, capsys) -> None:

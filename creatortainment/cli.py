@@ -93,10 +93,10 @@ def _prompt_to_open_output(path: Path) -> None:
     if not _stdin_is_interactive():
         return
     try:
-        answer = input("Open with default application? [y/N] ").strip().lower()
+        answer = input("Open with default application? [Y/n] ").strip().lower()
     except (EOFError, OSError):
         return
-    if answer not in {"y", "yes"}:
+    if answer in {"n", "no"}:
         return
     if not open_with_default_application(path):
         print(

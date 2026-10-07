@@ -175,6 +175,170 @@ def test_segment_only_scene_text_and_captions_use_flattened_timeline(tmp_path: P
         caption.close()
 
 
+def test_sequential_segments_replace_caption_without_persistence(tmp_path: Path) -> None:
+    script = _script()
+    manifest = _manifest(tmp_path)
+    caption = build_animated_caption_clip(
+        script, script["scenes"][0], manifest["scenes"][0], manifest, (320, 240), 2.0
+    )
+    try:
+        assert caption.mask.get_frame(0.8).max() > 0
+        assert caption.mask.get_frame(1.1).max() > 0
+        assert caption.mask.get_frame(2.0).max() == 0
+    finally:
+        caption.close()
+
+
+def test_overlapping_caption_persists_for_half_second(tmp_path: Path) -> None:
+    script = _script()
+    manifest = _manifest(tmp_path)
+    second = manifest["narration_segments"][1]
+    second["start_time_sec"] = 0.5
+    second["end_time_sec"] = 2.0
+    second["word_timestamps"][0]["start"] = 0.5
+    second["word_timestamps"][0]["end"] = 0.75
+    second["word_timestamps"][1]["start"] = 0.8
+    second["word_timestamps"][1]["end"] = 1.05
+    for timestamp in manifest["word_timestamps"][2:]:
+        timestamp["start"] -= 0.5
+        timestamp["end"] -= 0.5
+    manifest["scenes"][0]["end_time_sec"] = 2.0
+    caption = build_animated_caption_clip(
+        script, script["scenes"][0], manifest["scenes"][0], manifest, (320, 240), 2.0
+    )
+    try:
+        single_height = caption.get_frame(1.6).shape[0]
+        assert caption.mask.get_frame(1.2).max() > 0
+        assert caption.mask.get_frame(1.49).max() > 0
+        assert caption.mask.get_frame(1.51).max() > 0
+        assert caption.mask.get_frame(1.99).max() > 0
+        assert caption.get_frame(1.2).shape[0] > single_height
+        assert caption.get_frame(1.6).shape[0] == single_height
+    finally:
+        caption.close()
+
+
+def test_three_visible_voice_tracks_stack_newest_above_older_tracks(
+    tmp_path: Path,
+) -> None:
+    script = _script()
+    script["scenes"][0]["narration_segments"].append(
+        {"id": "c", "text": "Third voice.", "voice_id": "voice-c"}
+    )
+    manifest = _manifest(tmp_path)
+    manifest["narration_segments"].append(
+        {
+            "id": "c",
+            "scene_id": "scene-1",
+            "voice_id": "voice-c",
+            "text": "Third voice.",
+            "start_time_sec": 0.75,
+            "end_time_sec": 1.8,
+            "word_timestamps": [
+                {"word": "Third", "start": 0.75, "end": 1.0, "segment_id": "c"},
+                {"word": "voice.", "start": 1.05, "end": 1.3, "segment_id": "c"},
+            ],
+        }
+    )
+    manifest["word_timestamps"].extend(
+        [
+            {
+                "word": "Third",
+                "start": 0.75,
+                "end": 1.0,
+                "segment_id": "c",
+                "scene_id": "scene-1",
+                "voice_id": "voice-c",
+            },
+            {
+                "word": "voice.",
+                "start": 1.05,
+                "end": 1.3,
+                "segment_id": "c",
+                "scene_id": "scene-1",
+                "voice_id": "voice-c",
+            },
+        ]
+    )
+    caption = build_animated_caption_clip(
+        script, script["scenes"][0], manifest["scenes"][0], manifest, (320, 240), 2.0
+    )
+    try:
+        two_voice_height = caption.get_frame(0.6).shape[0]
+        three_voice_height = caption.get_frame(0.8).shape[0]
+        assert three_voice_height > two_voice_height
+        assert caption.mask.get_frame(1.85).max() > 0
+    finally:
+        caption.close()
+
+
+def test_same_voice_segments_do_not_remain_visible_in_gaps(tmp_path: Path) -> None:
+    script = _script()
+    script["scenes"][0]["narration_segments"] = [
+        {"id": "a", "text": "First line.", "voice_id": "voice-a"},
+        {"id": "b", "text": "Second line.", "voice_id": "voice-a"},
+    ]
+    manifest = _manifest(tmp_path)
+    manifest["narration_segments"][0]["end_time_sec"] = 0.5
+    manifest["narration_segments"][0]["word_timestamps"][-1]["end"] = 0.4
+    manifest["narration_segments"][1].update(
+        {
+            "id": "b",
+            "voice_id": "voice-a",
+            "text": "Second line.",
+            "start_time_sec": 1.0,
+            "end_time_sec": 1.5,
+            "word_timestamps": [
+                {"word": "Second", "start": 1.0, "end": 1.2, "segment_id": "b"},
+                {"word": "line.", "start": 1.25, "end": 1.45, "segment_id": "b"},
+            ],
+        }
+    )
+    manifest["word_timestamps"] = [
+        *manifest["word_timestamps"][:2],
+        {
+            "word": "Second",
+            "start": 1.0,
+            "end": 1.2,
+            "segment_id": "b",
+            "scene_id": "scene-1",
+            "voice_id": "voice-a",
+        },
+        {
+            "word": "line.",
+            "start": 1.25,
+            "end": 1.45,
+            "segment_id": "b",
+            "scene_id": "scene-1",
+            "voice_id": "voice-a",
+        },
+    ]
+    caption = build_animated_caption_clip(
+        script, script["scenes"][0], manifest["scenes"][0], manifest, (320, 240), 2.0
+    )
+    try:
+        assert caption.mask.get_frame(0.75).max() == 0
+        assert caption.mask.get_frame(1.1).max() > 0
+    finally:
+        caption.close()
+
+
+def test_touching_segment_boundary_does_not_create_overlap_persistence(
+    tmp_path: Path,
+) -> None:
+    script = _script()
+    manifest = _manifest(tmp_path)
+    caption = build_animated_caption_clip(
+        script, script["scenes"][0], manifest["scenes"][0], manifest, (320, 240), 2.0
+    )
+    try:
+        single_height = caption.get_frame(0.5).shape[0]
+        assert caption.get_frame(1.1).shape[0] == single_height
+        assert caption.get_frame(1.6).shape[0] == single_height
+    finally:
+        caption.close()
+
+
 def test_sequential_segment_audio_is_placed_at_manifest_times(tmp_path: Path) -> None:
     script = _script()
     manifest = _manifest(tmp_path)
