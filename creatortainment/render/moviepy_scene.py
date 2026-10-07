@@ -426,7 +426,15 @@ def _build_segmented_caption_clip(
         if isinstance(voice_id, str) and voice_id not in voice_order:
             voice_order.append(voice_id)
     scene_id = scene.get("id")
-    tracks: list[tuple[str, list[dict[str, Any]], list[Any], CaptionImageCache]] = []
+    segment_records = [
+        record
+        for record in manifest["narration_segments"]
+        if isinstance(record, dict) and record.get("scene_id") == scene_id
+    ]
+    record_order = {
+        str(record["id"]): index for index, record in enumerate(segment_records)
+    }
+    track_data: list[dict[str, Any]] = []
     scene_timestamps = [
         timestamp
         for timestamp in all_timestamps
@@ -457,9 +465,50 @@ def _build_segmented_caption_clip(
             style=track_style,
             resolution=resolution,
         )
-        tracks.append(
-            (voice_id, timestamps, chunks, CaptionImageCache(track_style, resolution))
+        track_data.append(
+            {
+                "voice_id": voice_id,
+                "timestamps": timestamps,
+                "chunks": chunks,
+                "cache": CaptionImageCache(track_style, resolution),
+            }
         )
+
+    def segment_times(record: dict[str, Any]) -> tuple[float, float]:
+        start = record.get("start_sec", record.get("start_time_sec"))
+        end = record.get("end_sec", record.get("end_time_sec"))
+        if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+            raise ValueError("Manifest narration segments must contain start and end times.")
+        return float(start), float(end)
+
+    def visibility_end(record: dict[str, Any]) -> float:
+        start, end = segment_times(record)
+        overlaps = any(
+            start < other_end
+            and other_start < end
+            and record.get("voice_id") != other.get("voice_id")
+            for other in segment_records
+            if other.get("id") != record.get("id")
+            for other_start, other_end in [segment_times(other)]
+        )
+        return end + 0.5 if overlaps else end
+
+    def active_voice_records(absolute_time: float) -> dict[str, dict[str, Any]]:
+        by_voice: dict[str, dict[str, Any]] = {}
+        for record in segment_records:
+            start, _end = segment_times(record)
+            if start <= absolute_time < visibility_end(record):
+                voice_id = str(record["voice_id"])
+                previous = by_voice.get(voice_id)
+                if previous is None or (
+                    segment_times(previous)[0],
+                    record_order.get(str(previous["id"]), -1),
+                ) < (
+                    start,
+                    record_order.get(str(record["id"]), -1),
+                ):
+                    by_voice[voice_id] = record
+        return by_voice
 
     cached_time: float | None = None
     cached_rendered: RenderedCaption | None = None
@@ -469,11 +518,30 @@ def _build_segmented_caption_clip(
         if cached_time == local_time:
             return cached_rendered
         absolute_time = float(scene_manifest["start_time_sec"]) + local_time
+        visible_records = active_voice_records(absolute_time)
+        ordered_tracks = sorted(
+            (
+                (record, track)
+                for track in track_data
+                if (record := visible_records.get(track["voice_id"])) is not None
+            ),
+            key=lambda item: (
+                segment_times(item[0])[0],
+                record_order.get(str(item[0]["id"]), -1),
+            ),
+            reverse=True,
+        )
         rendered_tracks: list[RenderedCaption] = []
-        for _voice_id, timestamps, chunks, image_cache in tracks:
-            active = resolve_active_caption_track(absolute_time, chunks, timestamps)
+        for record, track in ordered_tracks:
+            active = resolve_active_caption_track(
+                absolute_time,
+                track["chunks"],
+                track["timestamps"],
+            )
             if active is not None:
-                rendered_tracks.append(image_cache.get(chunks[active[0]], active[1]))
+                rendered_tracks.append(
+                    track["cache"].get(track["chunks"][active[0]], active[1])
+                )
         if not rendered_tracks:
             cached_time = local_time
             cached_rendered = None
