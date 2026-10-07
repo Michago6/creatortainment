@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from pathlib import Path
 import shutil
 import subprocess
@@ -60,8 +61,61 @@ def _make_source_times_safe(clip: VideoFileClip, path: Path) -> VideoFileClip:
     return clip
 
 
+def _load_gif_clip(path: Path) -> VideoClip:
+    """Decode GIF frames and timing with Pillow instead of MoviePy metadata."""
+    frames: list[np.ndarray] = []
+    durations: list[float] = []
+    with Image.open(path) as image:
+        frame_count = int(getattr(image, "n_frames", 1))
+        for frame_index in range(frame_count):
+            image.seek(frame_index)
+            frames.append(np.asarray(image.convert("RGB")).copy())
+            duration_ms = image.info.get("duration")
+            duration_sec = (
+                float(duration_ms) / 1000.0
+                if isinstance(duration_ms, (int, float)) and duration_ms > 0
+                else 0.0
+            )
+            durations.append(duration_sec)
+
+    if not frames:
+        raise ValueError(f"Animated visual asset has no usable frames: {path}")
+    if len(frames) == 1:
+        return VideoClip(
+            frame_function=lambda _time: frames[0],
+            duration=1.0,
+            has_constant_size=True,
+        ).with_fps(1.0)
+
+    fallback_duration = 0.1
+    durations = [
+        duration if duration > 0.0 else fallback_duration
+        for duration in durations
+    ]
+    cumulative = np.cumsum(durations).tolist()
+    source_duration = cumulative[-1]
+    source_fps = 1.0 / min(durations)
+
+    def frame(time: float) -> np.ndarray:
+        local_time = float(time) % source_duration
+        frame_index = min(
+            bisect_right(cumulative, local_time + 1e-10),
+            len(frames) - 1,
+        )
+        return frames[frame_index]
+
+    return VideoClip(
+        frame_function=frame,
+        duration=source_duration,
+        has_constant_size=True,
+    ).with_fps(source_fps)
+
+
 def load_visual_clip(path: Path, duration: float) -> VideoClip:
     """Load a visual asset with no audio and normalize it to ``duration``."""
+    if path.suffix.lower() == ".gif":
+        clip = _load_gif_clip(path)
+        return clip.with_duration(duration)
     if is_animated_visual(path):
         clip = _make_source_times_safe(
             VideoFileClip(str(path), audio=False), path

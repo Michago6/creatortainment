@@ -1,8 +1,8 @@
 # Asset library guidelines
 
 The local `scriptwriting/assets/` directory is a curated creative library.
-The repository-level production `assets/` directory remains the source of
-truth. The scriptwriting agent must not silently modify production assets.
+The `scriptwriting/assets/` directory is the canonical production asset root.
+The scriptwriting agent must not silently modify production assets.
 
 ## Organization
 

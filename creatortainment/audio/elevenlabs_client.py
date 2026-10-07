@@ -5,7 +5,9 @@ from __future__ import annotations
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, Sequence
+
+from ..schema.models import NarrationSegment
 
 from .tokenize import tokenize
 
@@ -15,9 +17,25 @@ class WordTimestamp:
     word: str
     start: float
     end: float
+    segment_id: str | None = None
+    scene_id: str | None = None
+    voice_id: str | None = None
+    segment_word_index: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"word": self.word, "start": self.start, "end": self.end}
+        result = {"word": self.word, "start": self.start, "end": self.end}
+        for key in ("segment_id", "scene_id", "voice_id", "segment_word_index"):
+            value = getattr(self, key)
+            if value is not None:
+                result[key] = value
+        return result
+
+
+@dataclass(frozen=True)
+class NarrationSegmentResult:
+    segment: NarrationSegment
+    audio_bytes: bytes
+    word_timestamps: list[WordTimestamp]
 
 
 @dataclass(frozen=True)
@@ -30,6 +48,26 @@ class NarrationResult:
 class NarrationClient(Protocol):
     def synthesize(self, scenes: list[dict[str, Any]]) -> NarrationResult:
         ...
+
+
+def _response_values(response: Any) -> tuple[Any, Any, list[str]]:
+    if isinstance(response, dict):
+        audio_base64 = response.get("audio_base64", response.get("audio_base_64"))
+        alignment = response.get("alignment") or response.get("normalized_alignment")
+        response_fields = sorted(response)
+    else:
+        audio_base64 = getattr(response, "audio_base64", None)
+        if audio_base64 is None:
+            audio_base64 = getattr(response, "audio_base_64", None)
+        alignment = getattr(response, "alignment", None)
+        if alignment is None:
+            alignment = getattr(response, "normalized_alignment", None)
+        response_fields = [
+            name
+            for name in ("audio_base64", "audio_base_64", "alignment", "normalized_alignment")
+            if hasattr(response, name)
+        ]
+    return audio_base64, alignment, response_fields
 
 
 def narration_text_and_pauses(
@@ -133,6 +171,96 @@ class ElevenLabsNarrationClient:
             f"parsed audio_bytes={len(audio_bytes)} word_timestamps={len(timestamps)}"
         )
         return NarrationResult(audio_bytes, timestamps, pauses)
+
+    def synthesize_segments(
+        self,
+        segments: Sequence[NarrationSegment],
+    ) -> list[NarrationSegmentResult]:
+        """Generate independently aligned audio for sequential narration segments."""
+        results: list[NarrationSegmentResult] = []
+        for segment in segments:
+            results.append(
+                self._synthesize_segment(
+                    segment,
+                    voice_id=segment.voice_id,
+                )
+            )
+        return results
+
+    def _synthesize_segment(
+        self,
+        segment: NarrationSegment,
+        *,
+        voice_id: str,
+    ) -> NarrationSegmentResult:
+        audio_bytes, timestamps = self._convert_with_timestamps(
+            text=segment.text,
+            voice_id=voice_id,
+        )
+        enriched = [
+            WordTimestamp(
+                word=timestamp.word,
+                start=timestamp.start,
+                end=timestamp.end,
+                segment_id=segment.id,
+                scene_id=segment.scene_id,
+                voice_id=segment.voice_id,
+                segment_word_index=index,
+            )
+            for index, timestamp in enumerate(timestamps)
+        ]
+        return NarrationSegmentResult(segment, audio_bytes, enriched)
+
+    def _convert_with_timestamps(
+        self,
+        *,
+        text: str,
+        voice_id: str,
+    ) -> tuple[bytes, list[WordTimestamp]]:
+        self._debug(
+            f"request text_chars={len(text)} word_count={len(tokenize(text))} "
+            f"voice_id={voice_id!r} model_id={self.model_id!r} pause_count=0"
+        )
+        if not self.api_key.strip():
+            raise RuntimeError("ELEVENLABS_API_KEY is required for real narration generation.")
+        try:
+            from elevenlabs.client import ElevenLabs
+        except ImportError as exc:
+            raise RuntimeError(
+                "The ElevenLabs SDK is required for live narration. "
+                "Install the full extras before using the live client."
+            ) from exc
+        client = ElevenLabs(api_key=self.api_key)
+        try:
+            response = client.text_to_speech.convert_with_timestamps(
+                voice_id=voice_id,
+                model_id=self.model_id,
+                text=text,
+                output_format="mp3_44100_128",
+            )
+            audio_base64, alignment, response_fields = _response_values(response)
+            self._debug(
+                f"response type={type(response).__name__} fields={response_fields} "
+                f"audio_base64_type={type(audio_base64).__name__} "
+                f"audio_base64_chars={len(audio_base64) if isinstance(audio_base64, str) else 0} "
+                f"alignment_type={type(alignment).__name__ if alignment is not None else 'None'}"
+            )
+            if not isinstance(audio_base64, str) or alignment is None:
+                raise RuntimeError(
+                    "ElevenLabs returned no usable audio bytes or character alignment. "
+                    f"Response type: {type(response).__name__}; fields: {response_fields}."
+                )
+            import base64
+
+            audio_bytes = base64.b64decode(audio_base64, validate=True)
+            timestamps = _word_timestamps_from_alignment(text, alignment)
+            return audio_bytes, timestamps
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            self._debug(f"request failed type={type(exc).__name__} message={exc}")
+            self._debug(traceback.format_exc())
+            raise RuntimeError(f"ElevenLabs request failed: {exc}") from exc
 
 
 def _word_timestamps_from_alignment(text: str, alignment: Any) -> list[WordTimestamp]:

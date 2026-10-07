@@ -154,6 +154,67 @@ def _storyboard_caption_layout(
     return selected_font, selected_lines, selected_line_height, box_height
 
 
+def _storyboard_caption_tracks(
+    script: dict[str, Any],
+    scene: dict[str, Any],
+) -> list[tuple[str | None, str]]:
+    """Return legacy text or ordered effective-voice caption tracks."""
+    narration_text = scene.get("narration_text")
+    if isinstance(narration_text, str):
+        return [(None, narration_text)]
+
+    scene_id = scene.get("id")
+    normalize_segments = getattr(script, "normalized_narration_segments", None)
+    if callable(normalize_segments):
+        segments = [
+            segment
+            for segment in normalize_segments()
+            if segment.scene_id == scene_id
+        ]
+        return [
+            (voice_id, " ".join(texts))
+            for voice_id, texts in _group_segment_texts(segments)
+        ]
+
+    project = script.get("project", {})
+    default_voice_id = project.get("voice_id")
+    tracks: list[tuple[str | None, list[str]]] = []
+    track_indexes: dict[str | None, int] = {}
+    segments = scene.get("narration_segments") or []
+    for segment in segments:
+        text = (
+            segment.get("text")
+            if isinstance(segment, dict)
+            else getattr(segment, "text", None)
+        )
+        voice_id = (
+            segment.get("voice_id")
+            if isinstance(segment, dict)
+            else getattr(segment, "voice_id", None)
+        ) or default_voice_id
+        if not isinstance(text, str) or not isinstance(voice_id, str):
+            raise ValueError("Scene narration_segments must contain text values.")
+        if voice_id not in track_indexes:
+            track_indexes[voice_id] = len(tracks)
+            tracks.append((voice_id, []))
+        tracks[track_indexes[voice_id]][1].append(text)
+    return [(voice_id, " ".join(texts)) for voice_id, texts in tracks]
+
+
+def _group_segment_texts(
+    segments: list[Any],
+) -> list[tuple[str, list[str]]]:
+    tracks: list[tuple[str, list[str]]] = []
+    track_indexes: dict[str, int] = {}
+    for segment in segments:
+        voice_id = segment.voice_id
+        if voice_id not in track_indexes:
+            track_indexes[voice_id] = len(tracks)
+            tracks.append((voice_id, []))
+        tracks[track_indexes[voice_id]][1].append(segment.text)
+    return tracks
+
+
 def _place_element(
     panel: Image.Image,
     element: dict[str, Any],
@@ -183,6 +244,9 @@ def _place_element(
         scale = (float(target_width) * canvas_size[0]) / native_width
         target_size = (max(1, round(native_width * scale)), max(1, round(native_height * scale)))
     image = image.resize(target_size, Image.Resampling.LANCZOS)
+    rotation = float(element.get("rotation", 0.0))
+    if rotation:
+        image = image.rotate(rotation, expand=True, resample=Image.Resampling.BICUBIC)
     opacity = max(0.0, min(1.0, float(keyframe.get("opacity", 1.0))))
     if opacity < 1.0:
         alpha = image.getchannel("A").point(lambda value: round(value * opacity))
@@ -261,37 +325,87 @@ def render_storyboard(script: dict[str, Any], assets_root: Path, output_path: Pa
         caption_padding = max(24, round(canvas_height * 0.015))
         margin_x = round(canvas_width * 12 / panel_width)
         text_x = round(canvas_width * 24 / panel_width)
-        body_font, lines, line_height, box_height = _storyboard_caption_layout(
-            scene["narration_text"],
-            draw,
-            canvas_size,
-            (panel_width, panel_height),
-            max_caption_height,
-            caption_padding,
-        )
-        text_bbox = draw.textbbox((0, 0), "Ag", font=body_font)
         margin_y = round(canvas_height * 12 / panel_height)
-        caption_overlay = Image.new("RGBA", panel.size, (0, 0, 0, 0))
-        caption_draw = ImageDraw.Draw(caption_overlay)
-        caption_draw.rectangle(
-            (margin_x, canvas_height - box_height - margin_y, canvas_width - margin_x, canvas_height - margin_y),
-            fill=STORYBOARD_CAPTION_BACKGROUND,
-        )
-        panel.alpha_composite(caption_overlay)
-        for line_number, text in enumerate(lines):
-            draw.text(
-                (
-                    text_x,
-                    canvas_height
-                    - box_height
-                    + caption_padding
-                    - text_bbox[1]
-                    + line_number * line_height,
-                ),
-                text,
-                fill="white",
-                font=body_font,
+        tracks = _storyboard_caption_tracks(script, scene)
+        if len(tracks) == 1 and tracks[0][0] is None:
+            body_font, lines, line_height, box_height = _storyboard_caption_layout(
+                tracks[0][1],
+                draw,
+                canvas_size,
+                (panel_width, panel_height),
+                max_caption_height,
+                caption_padding,
             )
+            text_bbox = draw.textbbox((0, 0), "Ag", font=body_font)
+            caption_overlay = Image.new("RGBA", panel.size, (0, 0, 0, 0))
+            caption_draw = ImageDraw.Draw(caption_overlay)
+            caption_draw.rectangle(
+                (
+                    margin_x,
+                    canvas_height - box_height - margin_y,
+                    canvas_width - margin_x,
+                    canvas_height - margin_y,
+                ),
+                fill=STORYBOARD_CAPTION_BACKGROUND,
+            )
+            panel.alpha_composite(caption_overlay)
+            for line_number, text in enumerate(lines):
+                draw.text(
+                    (
+                        text_x,
+                        canvas_height
+                        - box_height
+                        + caption_padding
+                        - text_bbox[1]
+                        + line_number * line_height,
+                    ),
+                    text,
+                    fill="white",
+                    font=body_font,
+                )
+        else:
+            track_height = max(1, max_caption_height // max(1, len(tracks)))
+            rendered_tracks: list[tuple[ImageFont.FreeTypeFont | ImageFont.ImageFont, list[str], int, int]] = []
+            total_height = 0
+            for _voice_id, text in tracks:
+                body_font, lines, line_height, _ = _storyboard_caption_layout(
+                    text,
+                    draw,
+                    canvas_size,
+                    (panel_width, panel_height),
+                    track_height,
+                    caption_padding,
+                )
+                text_bbox = draw.textbbox((0, 0), "Ag", font=body_font)
+                rendered_height = caption_padding * 2 + line_height * len(lines)
+                rendered_tracks.append((body_font, lines, line_height, text_bbox[1]))
+                total_height += rendered_height
+            track_gap = max(4, caption_padding // 3)
+            total_height += track_gap * max(0, len(rendered_tracks) - 1)
+            box_height = min(max_caption_height, total_height)
+            caption_overlay = Image.new("RGBA", panel.size, (0, 0, 0, 0))
+            caption_draw = ImageDraw.Draw(caption_overlay)
+            caption_draw.rectangle(
+                (
+                    margin_x,
+                    canvas_height - box_height - margin_y,
+                    canvas_width - margin_x,
+                    canvas_height - margin_y,
+                ),
+                fill=STORYBOARD_CAPTION_BACKGROUND,
+            )
+            panel.alpha_composite(caption_overlay)
+            cursor_y = canvas_height - box_height + caption_padding
+            for body_font, lines, line_height, text_top in rendered_tracks:
+                for line in lines:
+                    draw.text(
+                        (text_x, cursor_y - text_top),
+                        line,
+                        fill="white",
+                        font=body_font,
+                    )
+                    cursor_y += line_height
+                cursor_y += caption_padding + track_gap
         panel = panel.convert("RGB").resize(
             (panel_width, panel_height),
             Image.Resampling.LANCZOS,

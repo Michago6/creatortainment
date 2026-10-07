@@ -1,0 +1,234 @@
+{
+  "_conventions": {},
+  "project": {
+    "title": "Transition Showcase",
+    "date": "2026-09-20",
+    "tts_model": "eleven_flash_v2_5",
+    "voice_id": "fBD19tfE58bkETeiwUoC",
+    "duck_to_narration_pct": 0.4,
+    "aspect_ratio": "9:16",
+    "resolution": [
+      1080,
+      1920
+    ],
+    "fps": 30,
+    "caption_style": {
+      "font": "Montserrat-Bold",
+      "font_size": 64,
+      "color": "#FFFFFF",
+      "stroke_color": "#000000",
+      "stroke_width": 3,
+      "position": "bottom_center",
+      "max_chars_per_line": 28,
+      "highlight_color": "#FFD700",
+      "highlight_scale": 1.15,
+      "words_per_chunk": 3
+    }
+  },
+  "asset_registry": {
+    "bg_plain_white": {
+      "path": "assets/backgrounds/white_portrait.jpg",
+      "generate": null
+    },
+    "bg_cyberpunk_room": {
+      "path": "assets/backgrounds/cyberpunk_room.jpg",
+      "generate": null
+    },
+    "bg_retro_arcade_1980s": {
+      "path": "assets/backgrounds/retro_arcade_1980s.jpg",
+      "generate": null
+    },
+    "bg_default_studio": {
+      "path": "assets/backgrounds/default_studio.jpg",
+      "generate": null
+    },
+    "bg_retro_arcade_closeup": {
+      "path": "assets/backgrounds/retro_arcade_closeup.jpg",
+      "generate": null
+    },
+    "mrmouse_pointing": {
+      "path": "assets/sprites/mrmouse_pointing_left.png",
+      "generate": null
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene_1_intro",
+      "bg": "bg_plain_white",
+      "narration_text": "Let's look at every transition this pipeline supports.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0,
+      "transition_in": null,
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1750
+              ],
+              "target_height_frac": 0.32,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_2_crossfade",
+      "bg": "bg_cyberpunk_room",
+      "narration_text": "This is a crossfade transition.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.3,
+      "transition_in": {
+        "type": "crossfade",
+        "duration_sec": 0.5
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1750
+              ],
+              "target_height_frac": 0.32,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_3_zoom_out",
+      "bg": "bg_retro_arcade_1980s",
+      "narration_text": "This is a zoom out transition.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.3,
+      "transition_in": {
+        "type": "zoom_out",
+        "duration_sec": 0.6,
+        "zoom_scale": 1.3
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1750
+              ],
+              "target_height_frac": 0.32,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_4_push_hard",
+      "bg": "bg_default_studio",
+      "narration_text": "This is a hard push over transition.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.3,
+      "transition_in": {
+        "type": "push",
+        "direction": "left",
+        "style": "hard",
+        "duration_sec": 0.4
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1750
+              ],
+              "target_height_frac": 0.32,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene_5_push_soft",
+      "bg": "bg_retro_arcade_closeup",
+      "narration_text": "This is a soft push over transition.",
+      "caption_style": null,
+      "duration_sec": null,
+      "pause_before_sec": 0.3,
+      "transition_in": {
+        "type": "push",
+        "direction": "right",
+        "style": "soft",
+        "duration_sec": 0.5,
+        "feather_frac": 0.04
+      },
+      "duck_to_narration_pct": null,
+      "bg_music": null,
+      "sfx": [],
+      "elements": [
+        {
+          "id": "main_character",
+          "asset": "mrmouse_pointing",
+          "z_index": 10,
+          "anchor": "bottom_center",
+          "keyframes": [
+            {
+              "trigger_word_index": 0,
+              "pos": [
+                540,
+                1750
+              ],
+              "target_height_frac": 0.32,
+              "opacity": 1.0,
+              "easing": "instant"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

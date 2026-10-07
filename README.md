@@ -11,10 +11,10 @@ when everything looks right. ☕🎬
 
 ## Quick start: script to final video
 
-This walkthrough uses the fresh script:
+This walkthrough uses the archived example script:
 
 ```text
-scripts/pac-man-ghosts-were-never-smart.json
+scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json
 ```
 
 ### 1. Install the full dependencies
@@ -34,7 +34,8 @@ python3 -m venv .venv
 
 ### 2. Check the shared assets
 
-Every asset referenced by `asset_registry` must exist under `assets/`.
+Every asset referenced by `asset_registry` must exist under
+`scriptwriting/assets/`.
 Validation catches missing files, invalid word indexes, invalid element
 keyframes, invalid transitions, and other script errors before rendering.
 Registry entries use an object with a project-relative `assets/...` path:
@@ -49,12 +50,12 @@ Registry entries use an object with a project-relative `assets/...` path:
 The optional `generate` field may contain complete generation metadata for a
 pending asset. A missing `generate` field is equivalent to `generate: null`,
 so the file must already exist. All generated and reusable assets stay in the
-single repository-level `assets/` directory; project folders never contain
+canonical `scriptwriting/assets/` directory; project folders never contain
 their own assets directory.
 
 ```bash
 .venv/bin/python -m creatortainment validate \
-  scripts/pac-man-ghosts-were-never-smart.json
+  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json
 ```
 
 ## API keys / environment setup
@@ -108,7 +109,7 @@ Run the dedicated storyboard command:
 
 ```bash
 .venv/bin/python -m creatortainment storyboard \
-  scripts/pac-man-ghosts-were-never-smart.json
+  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json
 ```
 
 By default, this creates the project folder if needed and writes:
@@ -121,7 +122,7 @@ To choose another output path inside the project folder:
 
 ```bash
 .venv/bin/python -m creatortainment storyboard \
-  scripts/pac-man-ghosts-were-never-smart.json \
+  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json \
   --out storyboard/iteration-02.png
 ```
 
@@ -139,20 +140,23 @@ manifest:
 
 ```bash
 .venv/bin/python -m creatortainment align \
-  scripts/pac-man-ghosts-were-never-smart.json
+  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json
 ```
 
-The script's `project.voice_id` selects the voice. Narration files and their
-alignment sidecars are kept permanently in the stable project folder. If the
-same narration is already available, Creatortainment reuses it instead of
-making another API call. If the project already exists and the narration
-needs to change, the command asks for confirmation.
+The script's `project.voice_id` selects the default voice. Scenes may use
+ordered `narration_segments` for dialogue: each segment can inherit that
+default or specify its own `voice_id`, and local `start_at_word` anchors plus
+signed `start_offset_sec` values can create intentional overlap. Narration
+files and alignment sidecars are kept permanently in the stable project
+folder. If the same narration is already available, Creatortainment reuses it
+instead of making another API call. If the project already exists and the
+narration needs to change, the command asks for confirmation.
 
 For detailed diagnostics:
 
 ```bash
 .venv/bin/python -m creatortainment align \
-  scripts/pac-man-ghosts-were-never-smart.json \
+  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json \
   --debug
 ```
 
@@ -170,7 +174,7 @@ for checking:
 
 ```bash
 .venv/bin/python -m creatortainment render \
-  scripts/pac-man-ghosts-were-never-smart.json \
+  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json \
   --preview \
   --out output/preview.mp4
 ```
@@ -193,7 +197,7 @@ When the storyboard and preview look right, render at the script's actual
 
 ```bash
 .venv/bin/python -m creatortainment render \
-  scripts/pac-man-ghosts-were-never-smart.json \
+  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json \
   --out output/final.mp4
 ```
 
@@ -211,7 +215,7 @@ For a more descriptive filename:
 
 ```bash
 .venv/bin/python -m creatortainment render \
-  scripts/pac-man-ghosts-were-never-smart.json \
+  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json \
   --out output/pac-man-ghosts-were-never-smart-final.mp4
 ```
 

@@ -21,7 +21,9 @@ from PIL import Image, ImageFont
 from .captions import (
     CaptionImageCache,
     caption_position,
+    highlight_color_for_voice,
     resolve_active_caption,
+    resolve_active_caption_track,
     wrap_caption_lines,
 )
 from ..audio.mixing import build_final_audio_mix
@@ -74,6 +76,9 @@ def _element_clip(
     else:
         raise ValueError(f"Element {element.get('id', '<unnamed>')} has no target size.")
 
+    rotation = float(element.get("rotation", 0.0))
+    if rotation:
+        image = image.rotated(rotation, expand=True)
     opacity = float(keyframe.get("opacity", 1.0))
     if opacity != 1.0:
         image = image.with_opacity(opacity)
@@ -147,6 +152,9 @@ def _animated_element_clip(
             image = image.resize((width, height), Image.Resampling.LANCZOS)
         else:
             image = source.resize((width, height), Image.Resampling.LANCZOS)
+        rotation = float(element.get("rotation", 0.0))
+        if rotation:
+            image = image.rotate(rotation, expand=True, resample=Image.Resampling.BICUBIC)
         opacity = max(0.0, min(1.0, state["opacity"]))
         if opacity != 1.0:
             alpha = image.getchannel("A").point(lambda value: round(value * opacity))
@@ -201,6 +209,8 @@ def build_static_scene_clip(
     scene_manifest: dict[str, Any],
     assets_root: Path,
     manifest: dict[str, Any] | None = None,
+    *,
+    caption_start_offset_sec: float = 0.0,
 ):
     """Build one full-resolution scene with animated element layers."""
     resolution = tuple(script["project"]["resolution"])
@@ -236,24 +246,37 @@ def build_static_scene_clip(
             )
         )
     if manifest is None:
-        layers.append(build_static_caption_clip(script, scene, resolution, duration))
+        caption = build_static_caption_clip(script, scene, resolution, duration)
     else:
-        layers.append(
-            build_animated_caption_clip(
-                script,
-                scene,
-                scene_manifest,
-                manifest,
-                resolution,
-                duration,
-            )
+        caption = build_animated_caption_clip(
+            script,
+            scene,
+            scene_manifest,
+            manifest,
+            resolution,
+            duration,
         )
+    layers.append(caption.with_start(caption_start_offset_sec))
     return CompositeVideoClip(layers, size=resolution).with_duration(duration)
 
 
 def caption_text_for_scene(scene: dict[str, Any]) -> str:
-    """Return the verbatim narration used for a scene's static caption."""
-    return scene["narration_text"]
+    """Return the narration text represented by a legacy or segmented scene."""
+    narration_text = scene.get("narration_text")
+    if isinstance(narration_text, str):
+        return narration_text
+    segments = scene.get("narration_segments")
+    if not isinstance(segments, list):
+        raise ValueError("Scene must define narration_text or narration_segments.")
+    texts = [
+        segment.get("text")
+        if isinstance(segment, dict)
+        else getattr(segment, "text", None)
+        for segment in segments
+    ]
+    if len(texts) != len(segments):
+        raise ValueError("Scene narration_segments must contain text values.")
+    return " ".join(texts)
 
 
 def _caption_font(style: dict[str, Any]) -> str | None:
@@ -302,6 +325,15 @@ def build_animated_caption_clip(
     duration: float,
 ) -> VideoClip:
     """Build a cached, word-highlighted caption layer for an aligned scene."""
+    if isinstance(manifest.get("narration_segments"), list):
+        return _build_segmented_caption_clip(
+            script,
+            scene,
+            scene_manifest,
+            manifest,
+            resolution,
+            duration,
+        )
     style = resolve_caption_style(script, scene)
     chunks = wrap_caption_lines(
         caption_text_for_scene(scene),
@@ -311,6 +343,8 @@ def build_animated_caption_clip(
             if style.get("max_chars_per_line") is not None
             else None
         ),
+        style=style,
+        resolution=resolution,
     )
     timestamps = manifest.get("word_timestamps")
     if not isinstance(timestamps, list):
@@ -374,6 +408,124 @@ def build_animated_caption_clip(
     return clip
 
 
+def _build_segmented_caption_clip(
+    script: dict[str, Any],
+    scene: dict[str, Any],
+    scene_manifest: dict[str, Any],
+    manifest: dict[str, Any],
+    resolution: tuple[int, int],
+    duration: float,
+) -> VideoClip:
+    style = resolve_caption_style(script, scene)
+    all_timestamps = manifest.get("word_timestamps")
+    if not isinstance(all_timestamps, list):
+        raise ValueError("Manifest must contain word_timestamps for segmented captions.")
+    voice_order: list[str] = []
+    for timestamp in all_timestamps:
+        voice_id = timestamp.get("voice_id")
+        if isinstance(voice_id, str) and voice_id not in voice_order:
+            voice_order.append(voice_id)
+    scene_id = scene.get("id")
+    tracks: list[tuple[str, list[dict[str, Any]], list[Any], CaptionImageCache]] = []
+    scene_timestamps = [
+        timestamp
+        for timestamp in all_timestamps
+        if isinstance(timestamp, dict) and timestamp.get("scene_id") == scene_id
+    ]
+    for voice_id in voice_order:
+        timestamps = [
+            timestamp
+            for timestamp in scene_timestamps
+            if timestamp.get("voice_id") == voice_id
+        ]
+        if not timestamps:
+            continue
+        track_style = {
+            **style,
+            "highlight_color": highlight_color_for_voice(
+                style, voice_id, voice_order
+            ),
+        }
+        chunks = wrap_caption_lines(
+            " ".join(str(timestamp["word"]) for timestamp in timestamps),
+            int(track_style.get("words_per_chunk", 3)),
+            (
+                int(track_style["max_chars_per_line"])
+                if track_style.get("max_chars_per_line") is not None
+                else None
+            ),
+            style=track_style,
+            resolution=resolution,
+        )
+        tracks.append(
+            (voice_id, timestamps, chunks, CaptionImageCache(track_style, resolution))
+        )
+
+    cached_time: float | None = None
+    cached_rendered: RenderedCaption | None = None
+
+    def resolve_frame(local_time: float) -> RenderedCaption | None:
+        nonlocal cached_time, cached_rendered
+        if cached_time == local_time:
+            return cached_rendered
+        absolute_time = float(scene_manifest["start_time_sec"]) + local_time
+        rendered_tracks: list[RenderedCaption] = []
+        for _voice_id, timestamps, chunks, image_cache in tracks:
+            active = resolve_active_caption_track(absolute_time, chunks, timestamps)
+            if active is not None:
+                rendered_tracks.append(image_cache.get(chunks[active[0]], active[1]))
+        if not rendered_tracks:
+            cached_time = local_time
+            cached_rendered = None
+            return None
+        gap = max(4, int(style.get("font_size", 48) * 0.12))
+        width = max(rendered.image.width for rendered in rendered_tracks)
+        height = sum(rendered.image.height for rendered in rendered_tracks)
+        height += gap * (len(rendered_tracks) - 1)
+        image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        y = 0
+        for rendered in rendered_tracks:
+            x = (width - rendered.image.width) // 2
+            image.alpha_composite(rendered.image, (x, y))
+            y += rendered.image.height + gap
+        result = type(rendered_tracks[0])(
+            image=image,
+            position=caption_position(image.size, resolution, style),
+        )
+        cached_time = local_time
+        cached_rendered = result
+        return result
+
+    def frame(local_time: float) -> np.ndarray:
+        rendered = resolve_frame(float(local_time))
+        if rendered is None:
+            return np.zeros((1, 1, 3), dtype=np.uint8)
+        return np.asarray(rendered.image.convert("RGB"))
+
+    def mask_frame(local_time: float) -> np.ndarray:
+        rendered = resolve_frame(float(local_time))
+        if rendered is None:
+            return np.zeros((1, 1), dtype=float)
+        return np.asarray(rendered.image.getchannel("A"), dtype=float) / 255.0
+
+    def position(local_time: float) -> tuple[int, int]:
+        rendered = resolve_frame(float(local_time))
+        return (0, 0) if rendered is None else rendered.position
+
+    clip = VideoClip(
+        frame_function=frame,
+        duration=duration,
+        has_constant_size=False,
+    )
+    mask = VideoClip(
+        frame_function=mask_frame,
+        is_mask=True,
+        duration=duration,
+        has_constant_size=False,
+    )
+    return clip.with_mask(mask).with_position(position)
+
+
 def build_static_caption_clip(
     script: dict[str, Any],
     scene: dict[str, Any],
@@ -420,7 +572,35 @@ def attach_scene_narration(
     manifest: dict[str, Any],
     project_dir: Path,
 ):
-    """Attach the manifest's global narration slice to one scene clip."""
+    """Attach either legacy global audio or sequential segment audio."""
+    segment_records = manifest.get("narration_segments")
+    if isinstance(segment_records, list):
+        scene_id = scene_manifest.get("id")
+        scene_start = float(scene_manifest["start_time_sec"])
+        scene_end = float(scene_manifest["end_time_sec"])
+        scene_segments = [
+            record
+            for record in segment_records
+            if isinstance(record, dict) and record.get("scene_id") == scene_id
+        ]
+        if not scene_segments:
+            raise ValueError(f"No narration segments found for scene {scene_id!r}.")
+        audio_layers = []
+        for record in scene_segments:
+            audio_value = record.get("audio_path")
+            if not isinstance(audio_value, str) or not audio_value:
+                raise ValueError(f"Segment {record.get('id', '<unnamed>')!r} has no audio path.")
+            audio_path = Path(audio_value)
+            if not audio_path.is_absolute():
+                audio_path = project_dir / audio_path
+            if not audio_path.is_file():
+                raise FileNotFoundError(f"Narration audio file does not exist: {audio_path}")
+            source_audio = AudioFileClip(str(audio_path))
+            segment_start = float(record.get("start_sec", record["start_time_sec"]))
+            audio_layers.append(source_audio.with_start(segment_start - scene_start))
+        audio = CompositeAudioClip(audio_layers).with_duration(scene_end - scene_start)
+        return scene_clip.with_audio(audio)
+
     audio_path = Path(manifest["narration_audio_path"])
     if not audio_path.is_absolute():
         audio_path = project_dir / audio_path
@@ -467,6 +647,7 @@ def build_full_video_clip(
             scene_manifest,
             assets_root,
             manifest,
+            caption_start_offset_sec=scene_offsets[index].transition_duration_sec,
         )
         narrated_clip = attach_scene_narration(
             scene_clip,

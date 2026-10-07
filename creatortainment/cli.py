@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import shutil
+import subprocess
 import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -19,7 +21,14 @@ from .audio.manifest import (
     narration_hash,
     narration_hash_for_text,
     read_manifest,
+    refresh_cached_manifest_scenes,
     write_manifest,
+)
+from .audio.manifest import build_segment_manifest
+from .audio.segment_cache import (
+    cached_segment_paths,
+    find_cached_segment,
+    write_cached_segment,
 )
 from .asset_generation import generate_assets
 from . import config
@@ -43,8 +52,57 @@ from .provider_validation import validate_elevenlabs_values, validate_fal_models
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ASSETS_ROOT = REPO_ROOT / "assets"
+ASSETS_ROOT = REPO_ROOT / "scriptwriting" / "assets"
 PROJECTS_ROOT = REPO_ROOT / "projects"
+
+
+def _stdin_is_interactive() -> bool:
+    """Return whether prompting on stdin is safe."""
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except (OSError, ValueError):
+        return False
+
+
+def open_with_default_application(path: Path) -> bool:
+    """Launch a file with the platform's default application without waiting."""
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(path))
+            return True
+        command = ["open", str(path)] if sys.platform == "darwin" else None
+        if command is None:
+            opener = shutil.which("xdg-open")
+            if opener is None:
+                return False
+            command = [opener, str(path)]
+        subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _prompt_to_open_output(path: Path) -> None:
+    """Optionally open a successful output without affecting command success."""
+    if not _stdin_is_interactive():
+        return
+    try:
+        answer = input("Open with default application? [y/N] ").strip().lower()
+    except (EOFError, OSError):
+        return
+    if answer not in {"y", "yes"}:
+        return
+    if not open_with_default_application(path):
+        print(
+            f"Warning: could not open output with the default application: {path}",
+            file=sys.stderr,
+        )
 
 
 def output_timestamp(now: datetime | None = None) -> str:
@@ -275,11 +333,22 @@ def validate_command(script_path: Path, asset_gen_info: bool = False) -> int:
         plan.effective_model for plan in plans if plan.effective_model is not None
     }
     if not result.errors:
+        normalize_segments = getattr(script, "normalized_narration_segments", None)
+        segment_voice_ids = (
+            {
+                segment.voice_id
+                for segment in normalize_segments()
+                if segment.voice_id != script["project"]["voice_id"]
+            }
+            if callable(normalize_segments)
+            else set()
+        )
         result.errors.extend(
             error
             for error in validate_elevenlabs_values(
                 script["project"]["tts_model"],
                 script["project"]["voice_id"],
+                segment_voice_ids,
             )
         )
         missing_models_error = _group_missing_generation_models(plans)
@@ -362,6 +431,13 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
             "Run align for this script before rendering."
         )
     manifest = read_manifest(manifest_path)
+    try:
+        if refresh_cached_manifest_scenes(script, manifest, project_dir):
+            write_manifest(manifest_path, manifest)
+            if manifest_path != project_dir / "build_manifest.json":
+                write_manifest(project_dir / "build_manifest.json", manifest)
+    except (FileNotFoundError, ValueError) as exc:
+        raise RuntimeError(str(exc)) from exc
     render_script = scale_script_for_preview(script) if preview else script
     clip = build_full_video_clip(render_script, manifest, ASSETS_ROOT, project_dir)
     encoded_clip = prepare_render_clip(
@@ -386,6 +462,7 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
     print(f"Video render: {destination}")
     if preview:
         print("Preview mode: quarter resolution, reduced frame rate, and fast encoding.")
+    _prompt_to_open_output(destination)
     return 0
 
 
@@ -412,6 +489,7 @@ def storyboard_command(script_path: Path, output: Path | None) -> int:
     render_storyboard(script, ASSETS_ROOT, destination)
     print(f"Project: {project_dir}")
     print(f"Storyboard: {destination}")
+    _prompt_to_open_output(destination)
     return 0
 
 
@@ -532,6 +610,12 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
                     for scene in align_scenes(script["scenes"], timestamps)
                 ],
             }
+            refresh_cached_manifest_scenes(
+                script,
+                manifest,
+                project_dir,
+                validate_audio_duration=False,
+            )
             manifest_path = variant_manifest_path(project_dir, script_path)
             write_manifest(manifest_path, manifest)
             write_manifest(project_dir / "build_manifest.json", manifest)
@@ -549,12 +633,50 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
     project_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(script_path, project_dir / "script.json")
     api_key = config.get_elevenlabs_api_key()
-    result = ElevenLabsNarrationClient(
+    client = ElevenLabsNarrationClient(
         api_key,
         voice_id=voice_id,
         model_id=model,
         debug_log=debug_log,
-    ).synthesize(script["scenes"])
+    )
+    normalized_segments = script.normalized_narration_segments()
+    if any(scene.narration_segments is not None for scene in script.scenes):
+        narrations_dir = project_dir / "narrations"
+        segment_results = []
+        segment_audio_paths = []
+        generated = 0
+        reused = 0
+        for segment in normalized_segments:
+            cached_segment = find_cached_segment(narrations_dir, segment, model)
+            if cached_segment is not None:
+                segment_results.append(cached_segment)
+                segment_audio_paths.append(
+                    cached_segment_paths(narrations_dir, segment, model)[0]
+                )
+                reused += 1
+                continue
+            result = client.synthesize_segments([segment])[0]
+            audio_path, _ = write_cached_segment(narrations_dir, result, model)
+            segment_results.append(result)
+            segment_audio_paths.append(audio_path)
+            generated += 1
+        manifest = build_segment_manifest(
+            script,
+            project_dir / "build_manifest.json",
+            project_dir,
+            segment_results,
+            segment_audio_paths,
+            model,
+        )
+        write_manifest(variant_manifest_path(project_dir, script_path), manifest)
+        print(
+            f"Generated {generated} narration segment(s); "
+            f"reused {reused} cached segment(s)."
+        )
+        print(f"Updated manifest: {project_dir / 'build_manifest.json'}")
+        return 0
+
+    result = client.synthesize(script["scenes"])
     now = datetime.now(timezone.utc)
     compact = now.strftime("%Y%m%dT%H%M%S%fZ")
     short_hash = incoming_hash[:12]

@@ -362,7 +362,17 @@ def build_final_audio_mix(
     loudness_cache: LoudnessCache | None = None,
 ):
     """Combine pause-aligned narration, music, and SFX into one final track."""
-    narration_path = Path(manifest["narration_audio_path"])
+    narration_value = manifest.get("narration_audio_path")
+    if isinstance(narration_value, str):
+        narration_path = Path(narration_value)
+    else:
+        segment_records = manifest.get("narration_segments")
+        if not isinstance(segment_records, list) or not segment_records:
+            raise ValueError("Manifest has no narration audio source.")
+        first_audio = segment_records[0].get("audio_path")
+        if not isinstance(first_audio, str) or not first_audio:
+            raise ValueError("Manifest has no usable narration segment audio source.")
+        narration_path = Path(first_audio)
     if not narration_path.is_absolute():
         narration_path = project_dir / narration_path
     cache = loudness_cache or LoudnessCache()
