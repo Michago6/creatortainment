@@ -9,7 +9,7 @@ from typing import Any
 
 from .elevenlabs_client import NarrationSegmentResult, WordTimestamp
 from ..schema.models import NarrationSegment
-from .tokenize import tokenize
+from .tokenize import spoken_words
 
 
 def narration_segment_hash(
@@ -43,7 +43,8 @@ def find_cached_segment(
         timestamps = value["word_timestamps"]
         if not isinstance(timestamps, list):
             return None
-        if len(timestamps) != len(tokenize(segment.text)):
+        expected_words = spoken_words(segment.text)
+        if len(timestamps) != len(expected_words):
             return None
         words = [
             WordTimestamp(
@@ -57,7 +58,7 @@ def find_cached_segment(
             )
             for index, item in enumerate(timestamps)
         ]
-        if [item.word for item in words] != tokenize(segment.text):
+        if [item.word for item in words] != expected_words:
             return None
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         return None

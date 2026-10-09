@@ -18,6 +18,10 @@ from .audio.alignment import align_scenes
 from .audio.elevenlabs_client import ElevenLabsNarrationClient
 from .audio.manifest import (
     DEFAULT_TTS_MODEL,
+    AUDIO_DURATION_TOLERANCE_SEC,
+    audio_duration_sec,
+    cached_words_match,
+    narration_text_and_pauses,
     narration_hash,
     narration_hash_for_text,
     read_manifest,
@@ -505,24 +509,24 @@ def repair_cached_manifest_timing(
         audio_path = project_dir / audio_path
     if not audio_path.is_file():
         raise FileNotFoundError(f"Narration audio file does not exist: {audio_path}")
-    from moviepy import AudioFileClip
-
-    audio = AudioFileClip(str(audio_path))
-    try:
-        final_end = max(
-            (float(scene["end_time_sec"]) for scene in manifest.get("scenes", [])),
-            default=0.0,
-        )
-        if final_end <= audio.duration + 0.001:
-            return False
-    finally:
-        audio.close()
+    final_end = max(
+        (float(scene["end_time_sec"]) for scene in manifest.get("scenes", [])),
+        default=0.0,
+    )
+    audio_duration = audio_duration_sec(audio_path, final_end)
+    if final_end <= audio_duration + AUDIO_DURATION_TOLERANCE_SEC:
+        return False
 
     timestamps = manifest.get("word_timestamps")
     if not isinstance(timestamps, list):
         raise ValueError(f"Cached manifest has no usable word_timestamps: {manifest_path}")
     manifest["scenes"] = [
-        scene.to_dict() for scene in align_scenes(script["scenes"], timestamps)
+        scene.to_dict()
+        for scene in align_scenes(
+            script["scenes"],
+            timestamps,
+            narration_duration_sec=audio_duration,
+        )
     ]
     write_manifest(manifest_path, manifest)
     return True
@@ -531,6 +535,7 @@ def repair_cached_manifest_timing(
 def find_matching_narration(
     project_dir: Path,
     expected_hash: str,
+    expected_text: str | None = None,
 ) -> tuple[Path, list[dict[str, Any]]] | None:
     """Find any retained narration sidecar matching the requested hash."""
     narrations_dir = project_dir / "narrations"
@@ -549,6 +554,10 @@ def find_matching_narration(
             or not isinstance(model, str)
             or not isinstance(timestamps, list)
             or narration_hash_for_text(text, model) != expected_hash
+            or (
+                expected_text is not None
+                and not cached_words_match(text, timestamps)
+            )
         ):
             continue
         audio_path = sidecar_path.with_suffix(".mp3")
@@ -583,7 +592,13 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
             "project.voice_id is required in the input script and must contain an ElevenLabs voice ID."
         )
     matched_audio = (
-        find_matching_narration(project_dir, incoming_hash) if initialized else None
+        find_matching_narration(
+            project_dir,
+            incoming_hash,
+            narration_text_and_pauses(script["scenes"])[0],
+        )
+        if initialized
+        else None
     )
     if initialized and not force_audio:
         state = read_project_state(project_state_path(project_dir))
@@ -614,7 +629,6 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
                 script,
                 manifest,
                 project_dir,
-                validate_audio_duration=False,
             )
             manifest_path = variant_manifest_path(project_dir, script_path)
             write_manifest(manifest_path, manifest)
@@ -689,6 +703,10 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
     sidecar_path = audio_path.with_suffix(".json")
     audio_path.write_bytes(result.audio_bytes)
     timestamps = [timestamp.to_dict() for timestamp in result.word_timestamps]
+    narration_duration = audio_duration_sec(
+        audio_path,
+        max((float(item["end"]) for item in timestamps), default=0.0),
+    )
     sidecar_path.write_text(json.dumps({
         "narration_text": " ".join(scene["narration_text"].strip() for scene in script["scenes"]),
         "tts_model": model,
@@ -699,7 +717,14 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
         "narration_hash": incoming_hash,
         "narration_audio_path": str(audio_path.relative_to(project_dir)),
         "word_timestamps": timestamps,
-        "scenes": [scene.to_dict() for scene in align_scenes(script["scenes"], timestamps)],
+        "scenes": [
+            scene.to_dict()
+            for scene in align_scenes(
+                script["scenes"],
+                timestamps,
+                narration_duration_sec=narration_duration,
+            )
+        ],
     }
     write_manifest(project_dir / "build_manifest.json", manifest)
     write_manifest(variant_manifest_path(project_dir, script_path), manifest)

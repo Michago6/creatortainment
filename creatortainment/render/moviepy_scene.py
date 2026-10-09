@@ -27,6 +27,8 @@ from .captions import (
     wrap_caption_lines,
 )
 from ..audio.mixing import build_final_audio_mix
+from ..audio.manifest import validate_audio_timing
+from ..audio.tokenize import spoken_words
 from .mock import AssetDimensionCache, _asset_path
 from .visual_assets import is_animated_visual, load_visual_clip
 from .keyframes import resolve_element_state
@@ -336,7 +338,7 @@ def caption_text_for_scene(scene: dict[str, Any]) -> str:
     """Return the narration text represented by a legacy or segmented scene."""
     narration_text = scene.get("narration_text")
     if isinstance(narration_text, str):
-        return narration_text
+        return " ".join(spoken_words(narration_text))
     segments = scene.get("narration_segments")
     if not isinstance(segments, list):
         raise ValueError("Scene must define narration_text or narration_segments.")
@@ -348,7 +350,7 @@ def caption_text_for_scene(scene: dict[str, Any]) -> str:
     ]
     if len(texts) != len(segments):
         raise ValueError("Scene narration_segments must contain text values.")
-    return " ".join(texts)
+    return " ".join(spoken_words(" ".join(texts)))
 
 
 def _caption_font(style: dict[str, Any]) -> str | None:
@@ -751,14 +753,23 @@ def attach_scene_narration(
     if end <= start:
         raise ValueError("Scene narration end time must be greater than its start time.")
     source_audio = AudioFileClip(str(audio_path))
-    if end > source_audio.duration + 0.001:
+    try:
+        validate_audio_timing(float(source_audio.duration), end)
+    except ValueError as exc:
         duration = source_audio.duration
         source_audio.close()
         raise ValueError(
             f"Scene narration ends at {end:.3f}s, but the active audio ends at "
-            f"{duration:.3f}s. Re-run align for this script to regenerate its manifest."
+            f"{duration:.3f}s. {exc}"
+        ) from exc
+    normalized_end = min(end, float(source_audio.duration))
+    if normalized_end <= start:
+        source_audio.close()
+        raise ValueError(
+            f"Scene narration range is invalid after audio-duration normalization: "
+            f"start={start:.6f}s, end={normalized_end:.6f}s."
         )
-    audio = source_audio.subclipped(start, end)
+    audio = source_audio.subclipped(start, normalized_end)
     return scene_clip.with_audio(audio)
 
 

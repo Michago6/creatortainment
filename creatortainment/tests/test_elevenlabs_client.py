@@ -1,5 +1,7 @@
 """Offline tests for ElevenLabs response parsing and tokenizer alignment."""
 
+import pytest
+
 from creatortainment.audio.elevenlabs_client import (
     ElevenLabsNarrationClient,
     NarrationSegmentResult,
@@ -21,6 +23,21 @@ def test_character_alignment_becomes_word_timestamps() -> None:
     assert [item.word for item in result] == ["GPU,", "works."]
     assert result[0].start == 0.0
     assert result[0].end == 0.4
+
+
+def test_audio_tags_are_excluded_but_source_timing_gaps_are_preserved() -> None:
+    text = "[whispers] Hello [nervous laugh] there."
+    alignment = {
+        "characters": list(text),
+        "character_start_times_seconds": [index * 0.1 for index in range(len(text))],
+        "character_end_times_seconds": [(index + 1) * 0.1 for index in range(len(text))],
+    }
+
+    result = _word_timestamps_from_alignment(text, alignment)
+
+    assert [item.word for item in result] == ["Hello", "there."]
+    assert result[0].start == 1.1
+    assert result[1].start == pytest.approx(3.3)
 
 
 class FakeSegmentClient(ElevenLabsNarrationClient):

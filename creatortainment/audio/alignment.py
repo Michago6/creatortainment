@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable
 
-from .tokenize import tokenize
+from .tokenize import spoken_words
 
 
 @dataclass(frozen=True)
@@ -26,12 +26,13 @@ def align_scenes(
     word_timestamps: list[dict[str, Any]],
     *,
     pause_default_sec: float = 0.3,
+    narration_duration_sec: float | None = None,
 ) -> list[SceneAlignment]:
     scene_list = list(scenes)
     scene_ranges: list[tuple[dict[str, Any], int, list[dict[str, Any]]]] = []
     global_offset = 0
     for scene_number, scene in enumerate(scene_list):
-        words = tokenize(scene["narration_text"])
+        words = spoken_words(scene["narration_text"])
         word_count = len(words)
         end_offset = global_offset + word_count
         if end_offset > len(word_timestamps):
@@ -64,7 +65,11 @@ def align_scenes(
                 )
             end = next_start
         else:
-            end = final_word_end
+            end = (
+                narration_duration_sec
+                if narration_duration_sec is not None
+                else final_word_end
+            )
         result.append(
             SceneAlignment(
                 id=str(scene["id"]),

@@ -16,9 +16,10 @@ from .elevenlabs_client import (
     NarrationSegmentResult,
     narration_text_and_pauses,
 )
-from .tokenize import tokenize
+from .tokenize import spoken_words
 
 DEFAULT_TTS_MODEL = "eleven_flash_v2_5"
+AUDIO_DURATION_TOLERANCE_SEC = 0.1
 
 
 def narration_hash(script: dict[str, Any]) -> str:
@@ -41,6 +42,27 @@ def narration_hash(script: dict[str, Any]) -> str:
 def narration_hash_for_text(text: str, model: str = DEFAULT_TTS_MODEL) -> str:
     """Return the cache hash used for narration sidecar text and model."""
     return hashlib.sha256(f"{text}\n{model}".encode("utf-8")).hexdigest()
+
+
+def validate_audio_timing(audio_duration: float, timestamp_end: float) -> None:
+    difference = timestamp_end - audio_duration
+    if difference > AUDIO_DURATION_TOLERANCE_SEC:
+        raise ValueError(
+            "Cached narration audio is shorter than its word timestamps: "
+            f"audio={audio_duration:.3f}s, timestamps={timestamp_end:.3f}s, "
+            f"difference={difference:.3f}s. "
+            "Run align with --force-audio to refresh narration."
+        )
+
+
+def cached_words_match(text: str, timestamps: Any) -> bool:
+    expected = spoken_words(text)
+    return (
+        isinstance(timestamps, list)
+        and len(timestamps) == len(expected)
+        and [item.get("word") for item in timestamps if isinstance(item, dict)]
+        == expected
+    )
 
 
 def _project_value(script: Any, key: str, default: Any = None) -> Any:
@@ -112,6 +134,10 @@ def _segment_audio_duration(path: Path, fallback: float) -> float:
     if not math.isfinite(duration) or duration <= 0.0:
         return fallback
     return duration
+
+
+def audio_duration_sec(path: Path, fallback: float) -> float:
+    return _segment_audio_duration(path, fallback)
 
 
 def _segment_scene_alignments(
@@ -196,12 +222,11 @@ def refresh_cached_manifest_scenes(
             "Cached narration does not match the script narration. "
             "Run align before rendering."
         )
-
     if _has_segment_syntax(script):
         return _refresh_cached_segment_manifest(script, manifest, project_dir)
 
     text, _ = narration_text_and_pauses(script["scenes"])
-    expected_words = tokenize(text)
+    expected_words = spoken_words(text)
     timestamps = manifest.get("word_timestamps")
     if not isinstance(timestamps, list) or len(timestamps) != len(expected_words):
         raise ValueError(
@@ -245,21 +270,18 @@ def refresh_cached_manifest_scenes(
         raise FileNotFoundError(
             f"Cached narration audio file does not exist: {audio_path}"
         )
+    audio_duration: float | None = None
     if validate_audio_duration:
-        from moviepy import AudioFileClip
-
-        audio = AudioFileClip(str(audio_path))
-        try:
-            if previous_end > float(audio.duration) + 0.001:
-                raise ValueError(
-                    "Cached narration audio is shorter than its word timestamps. "
-                    "Run align before rendering."
-                )
-        finally:
-            audio.close()
+        audio_duration = _segment_audio_duration(audio_path, previous_end)
+        validate_audio_timing(audio_duration, previous_end)
 
     aligned_scenes = [
-        scene.to_dict() for scene in align_scenes(script["scenes"], timestamps)
+        scene.to_dict()
+        for scene in align_scenes(
+            script["scenes"],
+            timestamps,
+            narration_duration_sec=audio_duration,
+        )
     ]
     changed = manifest.get("scenes") != aligned_scenes
     if changed:
@@ -446,7 +468,11 @@ def build_manifest(
     if manifest_path.is_file():
         cached = read_manifest(manifest_path)
         if cached.get("narration_hash") == current_hash:
-            return cached, True
+            cached_text, _ = narration_text_and_pauses(
+                _scene_dicts_with_segment_text(script)
+            )
+            if cached_words_match(cached_text, cached.get("word_timestamps")):
+                return cached, True
 
     if _has_segment_syntax(script):
         segment_method = getattr(client, "synthesize_segments", None)
@@ -477,9 +503,17 @@ def build_manifest(
 
     result: NarrationResult = client.synthesize(script["scenes"])
     timestamps = [timestamp.to_dict() for timestamp in result.word_timestamps]
-    scenes = align_scenes(script["scenes"], timestamps)
     audio_path = manifest_path.parent / "narration.mp3"
     audio_path.write_bytes(result.audio_bytes)
+    audio_duration = _segment_audio_duration(
+        audio_path,
+        max((float(item["end"]) for item in timestamps), default=0.0),
+    )
+    scenes = align_scenes(
+        script["scenes"],
+        timestamps,
+        narration_duration_sec=audio_duration,
+    )
     manifest = {
         "narration_hash": current_hash,
         "narration_audio_path": str(audio_path),

@@ -9,6 +9,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
+from ..audio.tokenize import spoken_words
 from .visual_assets import first_frame_image, visual_dimensions
 
 STORYBOARD_CAPTION_BACKGROUND = (0, 0, 0, 153)
@@ -179,7 +180,7 @@ def _storyboard_caption_tracks(
     """Return legacy text or ordered effective-voice caption tracks."""
     narration_text = scene.get("narration_text")
     if isinstance(narration_text, str):
-        return [(None, narration_text)]
+        return [(None, " ".join(spoken_words(narration_text)))]
 
     scene_id = scene.get("id")
     normalize_segments = getattr(script, "normalized_narration_segments", None)
@@ -190,7 +191,7 @@ def _storyboard_caption_tracks(
             if segment.scene_id == scene_id
         ]
         return [
-            (voice_id, " ".join(texts))
+            (voice_id, " ".join(spoken_words(" ".join(texts))))
             for voice_id, texts in _group_segment_texts(segments)
         ]
 
@@ -216,7 +217,10 @@ def _storyboard_caption_tracks(
             track_indexes[voice_id] = len(tracks)
             tracks.append((voice_id, []))
         tracks[track_indexes[voice_id]][1].append(text)
-    return [(voice_id, " ".join(texts)) for voice_id, texts in tracks]
+    return [
+        (voice_id, " ".join(spoken_words(" ".join(texts))))
+        for voice_id, texts in tracks
+    ]
 
 
 def _group_segment_texts(
@@ -442,7 +446,7 @@ def write_manifest(script: dict[str, Any], project_dir: Path) -> None:
             {
                 "id": scene["id"],
                 "duration_sec": None,
-                "narration_word_count": len(scene["narration_text"].split()),
+                "narration_word_count": len(spoken_words(scene["narration_text"])),
                 "render_mode": "mock",
             }
         )

@@ -9,7 +9,7 @@ from typing import Any, Protocol, Sequence
 
 from ..schema.models import NarrationSegment
 
-from .tokenize import tokenize
+from .tokenize import spoken_tokens
 
 
 @dataclass(frozen=True)
@@ -106,7 +106,7 @@ class ElevenLabsNarrationClient:
     def synthesize(self, scenes: list[dict[str, Any]]) -> NarrationResult:
         text, pauses = narration_text_and_pauses(scenes)
         self._debug(
-            f"request text_chars={len(text)} word_count={len(tokenize(text))} "
+            f"request text_chars={len(text)} word_count={len(spoken_tokens(text))} "
             f"voice_id={self.voice_id!r} model_id={self.model_id!r} "
             f"pause_count={len(pauses)}"
         )
@@ -218,7 +218,7 @@ class ElevenLabsNarrationClient:
         voice_id: str,
     ) -> tuple[bytes, list[WordTimestamp]]:
         self._debug(
-            f"request text_chars={len(text)} word_count={len(tokenize(text))} "
+            f"request text_chars={len(text)} word_count={len(spoken_tokens(text))} "
             f"voice_id={voice_id!r} model_id={self.model_id!r} pause_count=0"
         )
         if not self.api_key.strip():
@@ -276,20 +276,18 @@ def _word_timestamps_from_alignment(text: str, alignment: Any) -> list[WordTimes
         raise RuntimeError("ElevenLabs alignment has an unsupported shape.")
     if not (len(characters) == len(starts) == len(ends)):
         raise RuntimeError("ElevenLabs alignment arrays have different lengths.")
-    tokens = tokenize(text)
+    tokens = spoken_tokens(text)
     result: list[WordTimestamp] = []
-    cursor = 0
     for token in tokens:
-        cursor = text.find(token, cursor)
-        if cursor < 0 or cursor + len(token) > len(characters):
-            raise RuntimeError(f"Could not map aligned token {token!r} to source text.")
-        end_cursor = cursor + len(token)
+        if token.end > len(characters):
+            raise RuntimeError(
+                f"Could not map aligned token {token.word!r} to source text."
+            )
         result.append(
             WordTimestamp(
-                word=token,
-                start=float(starts[cursor]),
-                end=float(ends[end_cursor - 1]),
+                word=token.word,
+                start=float(starts[token.start]),
+                end=float(ends[token.end - 1]),
             )
         )
-        cursor = end_cursor
     return result

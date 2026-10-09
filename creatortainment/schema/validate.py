@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from .models import AssetRegistryEntryModel, ScriptModel
-from .tokenize import tokenize
+from .tokenize import spoken_words
 
 
 @dataclass(frozen=True)
@@ -187,7 +187,7 @@ def validate_script(
             model.project.voice_id,
             scene_number - 1,
         )
-        words = tokenize(" ".join(segment.text for segment in scene_segments))
+        words = spoken_words(" ".join(segment.text for segment in scene_segments))
         if effective_background not in model.asset_registry:
             errors.append(
                 f"{prefix}.bg={effective_background!r} is not declared in asset_registry."

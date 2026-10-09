@@ -194,11 +194,33 @@ When the requested narration already exists in the project's narration history, 
 
 If a new narration would need to be generated, the normal workflow requires explicit confirmation before the API generation occurs, unless a force option intentionally bypasses that confirmation.
 
-## 4.3 Word tokenization
+## 4.3 TTS text, spoken words, and audio tags
+
+`narration_text` is the exact text sent to ElevenLabs. It may contain supported
+v4 audio tags such as `[whispers]`, `[laughs]`, `[sighs]`, `[beat]`, or
+multi-word directives such as `[nervous laugh]`. Keep these tags in the
+narration text because they control delivery and may add pauses.
+
+The pipeline derives the spoken-word sequence from that same text. Recognized
+audio-tag directives are not spoken words: they never appear in captions and
+never consume word indexes. Tag-induced timing gaps remain in the returned
+word timestamps. Do not add a second authored `read_narration` field.
+
+Write tags adjacent to the narration they affect, for example:
+
+```text
+[whispers] Something is wrong. [beat] Did you hear that?
+```
+
+Only directive-shaped supported tag syntax is treated this way; ordinary
+narration text is preserved.
+
+## 4.4 Word tokenization
 
 Word indexing is **0-based**.
 
-Tokenize `narration_text` by:
+For spoken-word indexing, tokenize the narration after excluding recognized
+audio-tag directives, then:
 
 1. stripping leading/trailing whitespace
 2. collapsing repeated whitespace
@@ -214,7 +236,8 @@ Examples:
 "we're"                 -> one token
 ```
 
-`trigger_word_index` always refers to the local word index inside that scene's own `narration_text`.
+`trigger_word_index` always refers to the local spoken-word index inside that
+scene's narration. Audio tags do not count.
 
 The script author never computes the global word offset.
 
@@ -320,7 +343,7 @@ Captions are derived from narration.
 
 There is no separate caption-text field.
 
-Captions always display the scene's `narration_text` verbatim.
+Captions display the derived spoken narration, not non-spoken audio tags.
 
 Do not create a second manually-maintained caption string.
 

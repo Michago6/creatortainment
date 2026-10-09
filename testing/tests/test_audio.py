@@ -17,7 +17,7 @@ from creatortainment.audio.manifest import (
     narration_hash,
     refresh_cached_manifest_scenes,
 )
-from creatortainment.audio.tokenize import tokenize
+from creatortainment.audio.tokenize import spoken_words, tokenize
 
 
 ROOT = Path(__file__).parents[2]
@@ -34,6 +34,12 @@ def test_tokenize_preserves_word_boundaries() -> None:
     ]
     assert tokenize("") == []
     assert tokenize("single") == ["single"]
+
+
+def test_spoken_words_exclude_leading_embedded_trailing_and_multiword_tags() -> None:
+    assert spoken_words(
+        "[curious] Does math scare you? [nervous laugh] Really? [beat]"
+    ) == ["Does", "math", "scare", "you?", "Really?"]
 
 
 def _script() -> dict:
@@ -214,7 +220,7 @@ def _cached_manifest_script() -> dict:
 
 
 def _write_cached_audio(path: Path) -> None:
-    audio = AudioClip(lambda t: [0.0, 0.0], duration=2.0, fps=44100)
+    audio = AudioClip(lambda t: np.array([0.1, 0.1]), duration=2.0, fps=44100)
     try:
         audio.write_audiofile(str(path), fps=44100, codec="pcm_s16le", logger=None)
     finally:
@@ -311,6 +317,59 @@ def test_cached_manifest_rejects_changed_narration(tmp_path: Path) -> None:
     script["scenes"][0]["narration_text"] = "Changed."
 
     with pytest.raises(ValueError, match="does not match"):
+        refresh_cached_manifest_scenes(script, manifest, tmp_path)
+
+
+def test_old_tagged_manifest_is_rejected_for_explicit_refresh(tmp_path: Path) -> None:
+    script = _cached_manifest_script()
+    script["scenes"][0]["narration_text"] = "[whispers] Alpha beta."
+    audio_path = tmp_path / "narration.wav"
+    _write_cached_audio(audio_path)
+    manifest = _cached_manifest(script, audio_path)
+    manifest["word_timestamps"][0]["word"] = "[whispers]"
+
+    with pytest.raises(ValueError, match="word timestamp .* does not match"):
+        refresh_cached_manifest_scenes(script, manifest, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("final_end", "should_fail"),
+    [(2.049, False), (2.101, True)],
+)
+def test_cached_audio_duration_uses_bounded_alignment_tolerance(
+    tmp_path: Path,
+    final_end: float,
+    should_fail: bool,
+    monkeypatch,
+) -> None:
+    script = _cached_manifest_script()
+    audio_path = tmp_path / "narration.wav"
+    _write_cached_audio(audio_path)
+    manifest = _cached_manifest(script, audio_path)
+    manifest["word_timestamps"][-1]["end"] = final_end
+    manifest["scenes"][-1]["end_time_sec"] = final_end
+    manifest["scenes"][-1]["duration_sec"] = final_end - 0.8
+    class FakeAudio:
+        duration = 2.0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        "creatortainment.audio.manifest._segment_audio_duration",
+        lambda _path, _fallback: FakeAudio.duration,
+    )
+
+    if should_fail:
+        with pytest.raises(ValueError, match="audio=|shorter"):
+            refresh_cached_manifest_scenes(script, manifest, tmp_path)
+    else:
         refresh_cached_manifest_scenes(script, manifest, tmp_path)
 
 

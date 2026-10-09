@@ -72,6 +72,12 @@ def test_static_caption_uses_verbatim_scene_narration_and_merged_style() -> None
         clip.close()
 
 
+def test_caption_text_excludes_audio_tags() -> None:
+    assert caption_text_for_scene(
+        {"narration_text": "[whispers] Hello [beat] there."}
+    ) == "Hello there."
+
+
 def test_extra_duration_keeps_scene_visuals_and_final_caption_active() -> None:
     script = _script("example_script.json")
     script = deepcopy(script)
