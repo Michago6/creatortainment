@@ -106,6 +106,30 @@ def test_first_scene_transition_must_be_null() -> None:
         ScriptModel.model_validate(script)
 
 
+def test_backgrounds_inherit_until_explicitly_replaced() -> None:
+    script = json.loads((SCRIPTS / "example_script.json").read_text(encoding="utf-8"))
+    first_bg = script["scenes"][0]["bg"]
+    second_bg = script["scenes"][-1]["bg"]
+    for scene in script["scenes"][1:-1]:
+        scene.pop("bg", None)
+    script["scenes"][-1]["bg"] = second_bg
+
+    model = ScriptModel.model_validate(script)
+
+    assert model.effective_backgrounds() == [
+        *([first_bg] * (len(script["scenes"]) - 1)),
+        second_bg,
+    ]
+
+
+def test_first_scene_must_define_a_background() -> None:
+    script = json.loads((SCRIPTS / "example_script.json").read_text(encoding="utf-8"))
+    script["scenes"][0].pop("bg")
+
+    with pytest.raises(ValidationError, match="no background has been defined"):
+        ScriptModel.model_validate(script)
+
+
 def test_legacy_narration_text_normalizes_to_one_default_voice_segment() -> None:
     script = json.loads(
         (SCRIPTS / "example_script.json").read_text(encoding="utf-8")

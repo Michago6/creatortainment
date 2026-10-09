@@ -14,6 +14,24 @@ from .visual_assets import first_frame_image, visual_dimensions
 STORYBOARD_CAPTION_BACKGROUND = (0, 0, 0, 153)
 
 
+def _effective_backgrounds(script: dict[str, Any]) -> list[str]:
+    resolver = getattr(script, "effective_backgrounds", None)
+    if callable(resolver):
+        return resolver()
+    backgrounds: list[str] = []
+    active: str | None = None
+    for index, scene in enumerate(script["scenes"]):
+        value = scene.get("bg")
+        if value is not None:
+            active = value
+        elif active is None:
+            raise ValueError(
+                f"scenes[{index}].bg is required because no background has been defined yet"
+            )
+        backgrounds.append(active)
+    return backgrounds
+
+
 def storyboard_panel_size(
     resolution: tuple[int, int], panel_width: int = 360
 ) -> tuple[int, int]:
@@ -269,6 +287,7 @@ def _place_element(
 
 def render_storyboard(script: dict[str, Any], assets_root: Path, output_path: Path) -> None:
     scenes = script["scenes"]
+    backgrounds = _effective_backgrounds(script)
     canvas_size = tuple(script["project"]["resolution"])
     columns = storyboard_columns(canvas_size, len(scenes))
     sheet_width = 1440 if canvas_size[0] > canvas_size[1] else 1080
@@ -287,7 +306,7 @@ def render_storyboard(script: dict[str, Any], assets_root: Path, output_path: Pa
         y = (index // columns) * panel_height
         panel = Image.new("RGBA", (canvas_width, canvas_height), "#26384d")
         draw = ImageDraw.Draw(panel)
-        asset_path = _asset_path(script["asset_registry"], scene["bg"], assets_root)
+        asset_path = _asset_path(script["asset_registry"], backgrounds[index], assets_root)
         if asset_path.is_file():
             background = first_frame_image(asset_path).convert("RGB")
             scale = max(canvas_width / background.width, canvas_height / background.height)

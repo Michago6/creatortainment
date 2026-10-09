@@ -80,6 +80,32 @@ def test_storyboard_caption_background_is_actually_60_percent_opaque(
     assert pixel == (40, 60, 80)
 
 
+def test_storyboard_uses_inherited_background_for_later_scenes(tmp_path, monkeypatch) -> None:
+    background = Image.new("RGB", (1080, 1920), (100, 150, 200))
+    background_path = tmp_path / "background.png"
+    background.save(background_path)
+    script = {
+        "project": {"resolution": [1080, 1920]},
+        "asset_registry": {
+            "background": {"path": str(background_path), "generate": None},
+        },
+        "scenes": [
+            {"bg": "background", "narration_text": "First", "elements": []},
+            {"narration_text": "Inherited", "elements": []},
+        ],
+    }
+    paths: list[str] = []
+    monkeypatch.setattr(
+        storyboard_renderer,
+        "_asset_path",
+        lambda _registry, key, _assets_root: paths.append(key) or background_path,
+    )
+
+    render_storyboard(script, tmp_path / "assets", tmp_path / "storyboard.png")
+
+    assert paths == ["background", "background"]
+
+
 def test_long_storyboard_caption_preserves_beginning_and_end() -> None:
     image = Image.new("RGBA", (1080, 1920))
     draw = ImageDraw.Draw(image)

@@ -232,7 +232,7 @@ class ProjectModel(ScriptModelBase):
 
 class SceneModel(ScriptModelBase):
     id: str
-    bg: str
+    bg: str | None = None
     narration_text: str | None = None
     narration_segments: list[NarrationSegmentModel] | None = None
     caption_style: CaptionStyleModel | None = None
@@ -298,6 +298,21 @@ class ScriptModel(ScriptModelBase):
     asset_registry: dict[str, AssetRegistryEntryModel]
     scenes: list[SceneModel] = Field(min_length=1)
 
+    def effective_backgrounds(self) -> list[str]:
+        """Resolve each scene's background through forward inheritance."""
+        backgrounds: list[str] = []
+        active: str | None = None
+        for index, scene in enumerate(self.scenes):
+            if scene.bg is not None:
+                active = scene.bg
+            elif active is None:
+                raise ValueError(
+                    f"scenes[{index}].bg is required because no background has been defined yet"
+                )
+            assert active is not None
+            backgrounds.append(active)
+        return backgrounds
+
     @model_validator(mode="before")
     @classmethod
     def tag_legacy_music_cues(cls, value: Any) -> Any:
@@ -323,6 +338,7 @@ class ScriptModel(ScriptModelBase):
     def validate_scene_order(self) -> "ScriptModel":
         if self.scenes[0].transition_in is not None:
             raise ValueError("scenes[0].transition_in must be null")
+        self.effective_backgrounds()
         self.normalized_narration_segments()
         segments = self.normalized_narration_segments()
         by_id = {segment.id: segment for segment in segments}

@@ -172,15 +172,26 @@ def validate_script(
                         "is not declared in asset_registry."
                     )
 
-    for scene_number, scene in enumerate(model.scenes, start=1):
+    try:
+        effective_backgrounds = model.effective_backgrounds()
+    except ValueError as exc:
+        errors.append(str(exc))
+        effective_backgrounds = [scene.bg for scene in model.scenes]
+
+    for scene_number, (scene, effective_background) in enumerate(
+        zip(model.scenes, effective_backgrounds),
+        start=1,
+    ):
         prefix = f"scenes[{scene_number - 1}]"
         scene_segments = scene.normalized_narration_segments(
             model.project.voice_id,
             scene_number - 1,
         )
         words = tokenize(" ".join(segment.text for segment in scene_segments))
-        if scene.bg not in model.asset_registry:
-            errors.append(f"{prefix}.bg={scene.bg!r} is not declared in asset_registry.")
+        if effective_background not in model.asset_registry:
+            errors.append(
+                f"{prefix}.bg={effective_background!r} is not declared in asset_registry."
+            )
         music = scene.bg_music
         if music is not None:
             error = _index_error(

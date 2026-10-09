@@ -36,6 +36,48 @@ from ..timeline import timed_element
 SOFT_PUSH_FEATHER_FRAC = 0.25
 
 
+def effective_backgrounds(script: dict[str, Any]) -> list[str]:
+    """Resolve explicit and inherited scene background registry keys."""
+    resolver = getattr(script, "effective_backgrounds", None)
+    if callable(resolver):
+        return resolver()
+    backgrounds: list[str] = []
+    active: str | None = None
+    for index, scene in enumerate(script.get("scenes", [])):
+        value = scene.get("bg")
+        if value is not None:
+            active = value
+        elif active is None:
+            raise ValueError(
+                f"scenes[{index}].bg is required because no background has been defined yet"
+            )
+        backgrounds.append(active)
+    return backgrounds
+
+
+class BackgroundTimeline:
+    """Share one continuously advancing source clip across a background run."""
+
+    def __init__(
+        self,
+        path: Path,
+        resolution: tuple[int, int],
+        duration: float,
+    ) -> None:
+        self.source = _cover_background(path, resolution, duration)
+        self.duration = duration
+
+    def clip(self, offset_sec: float, duration: float) -> VideoClip:
+        start = max(0.0, float(offset_sec))
+        end = min(self.duration, start + duration)
+        if end <= start:
+            raise ValueError("Background timeline requested an empty source range.")
+        return self.source.subclipped(start, end).with_duration(duration)
+
+    def close(self) -> None:
+        self.source.close()
+
+
 def _cover_background(path: Path, resolution: tuple[int, int], duration: float) -> VideoClip:
     width, height = resolution
     clip = load_visual_clip(path, duration)
@@ -47,6 +89,26 @@ def _cover_background(path: Path, resolution: tuple[int, int], duration: float) 
         width=width,
         height=height,
     ).with_duration(duration)
+
+
+def _background_runs(
+    script: dict[str, Any],
+    backgrounds: list[str],
+    scene_offsets: list[Any],
+) -> list[tuple[int, int, str, float, float]]:
+    runs: list[tuple[int, int, str, float, float]] = []
+    start = 0
+    for index in range(1, len(backgrounds) + 1):
+        if index == len(backgrounds) or backgrounds[index] != backgrounds[start]:
+            origin = float(scene_offsets[start].visual_start_sec)
+            end = max(
+                float(scene_offsets[item].visual_start_sec)
+                + float(scene_offsets[item].unit_duration_sec)
+                for item in range(start, index)
+            )
+            runs.append((start, index, backgrounds[start], origin, end))
+            start = index
+    return runs
 
 
 def _element_clip(
@@ -211,14 +273,24 @@ def build_static_scene_clip(
     manifest: dict[str, Any] | None = None,
     *,
     caption_start_offset_sec: float = 0.0,
+    background_clip: VideoClip | None = None,
+    background_key: str | None = None,
 ):
     """Build one full-resolution scene with animated element layers."""
     resolution = tuple(script["project"]["resolution"])
     duration = scene_duration_sec(scene, scene_manifest)
     registry = script["asset_registry"]
-    background_path = _asset_path(registry, scene["bg"], assets_root)
+    background_path = _asset_path(
+        registry,
+        background_key if background_key is not None else scene["bg"],
+        assets_root,
+    )
     cache = AssetDimensionCache()
-    layers = [_cover_background(background_path, resolution, duration)]
+    layers = [
+        background_clip
+        if background_clip is not None
+        else _cover_background(background_path, resolution, duration)
+    ]
     if manifest is None:
         layers.extend(
             _element_clip(
@@ -706,9 +778,52 @@ def build_full_video_clip(
     if not scenes:
         raise ValueError("Cannot build a video without scenes.")
 
-    scene_units = []
     scene_offsets = build_scene_final_offsets(script, manifest)
+    backgrounds = effective_backgrounds(script)
+    timelines: dict[int, BackgroundTimeline] = {}
+    run_for_scene: dict[int, tuple[int, float, float]] = {}
+    for run_start, run_end, background_key, origin, end in _background_runs(
+        script,
+        backgrounds,
+        scene_offsets,
+    ):
+        run_has_inheritance = any(
+            (
+                scene.get("bg") is None
+                if hasattr(scene, "get")
+                else getattr(scene, "bg", None) is None
+            )
+            for scene in scenes[run_start:run_end]
+        )
+        if run_has_inheritance:
+            path = _asset_path(script["asset_registry"], background_key, assets_root)
+            timelines[run_start] = BackgroundTimeline(
+                path,
+                tuple(script["project"]["resolution"]),
+                max(0.001, end - origin),
+            )
+        for scene_index in range(run_start, run_end):
+            run_for_scene[scene_index] = (run_start, origin, end)
+
+    scene_units = []
     for index, (scene, scene_manifest) in enumerate(zip(scenes, scene_manifests)):
+        timeline_info = run_for_scene[index]
+        run_start, run_origin, _run_end = timeline_info
+        timeline = timelines.get(run_start)
+        pause = scene_offsets[index].pause_before_sec
+        background_key = backgrounds[index]
+        background_clip = None
+        pause_background_clip = None
+        if timeline is not None:
+            background_clip = timeline.clip(
+                scene_offsets[index].visual_start_sec + pause - run_origin,
+                float(scene_offsets[index].unit_duration_sec - pause),
+            )
+            if pause:
+                pause_background_clip = timeline.clip(
+                    scene_offsets[index].visual_start_sec - run_origin,
+                    pause,
+                )
         scene_clip = build_static_scene_clip(
             script,
             scene,
@@ -716,6 +831,8 @@ def build_full_video_clip(
             assets_root,
             manifest,
             caption_start_offset_sec=scene_offsets[index].transition_duration_sec,
+            background_clip=background_clip,
+            background_key=background_key,
         )
         narrated_clip = attach_scene_narration(
             scene_clip,
@@ -723,20 +840,22 @@ def build_full_video_clip(
             manifest,
             project_dir,
         )
-        pause = scene_offsets[index].pause_before_sec
         if pause:
-            background_path = _asset_path(script["asset_registry"], scene["bg"], assets_root)
-            filler = _cover_background(
-                background_path,
-                tuple(script["project"]["resolution"]),
-                pause,
-            )
+            if pause_background_clip is None:
+                background_path = _asset_path(
+                    script["asset_registry"], background_key, assets_root
+                )
+                pause_background_clip = _cover_background(
+                    background_path,
+                    tuple(script["project"]["resolution"]),
+                    pause,
+                )
             silent_audio = AudioClip(
                 frame_function=lambda t: [0.0, 0.0],
                 duration=pause,
                 fps=44100,
             )
-            unit_parts = [filler.with_audio(silent_audio)]
+            unit_parts = [pause_background_clip.with_audio(silent_audio)]
         else:
             unit_parts = []
         unit_parts.append(narrated_clip)

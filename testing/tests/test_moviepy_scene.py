@@ -155,6 +155,31 @@ def test_full_video_concatenates_all_manifest_scenes_in_order() -> None:
         clip.close()
 
 
+def test_full_video_inherits_backgrounds_across_scenes() -> None:
+    script = deepcopy(_script("example_script.json"))
+    inherited = script["scenes"][0]["bg"]
+    for scene in script["scenes"][1:]:
+        scene.pop("bg", None)
+    manifest = json.loads(
+        (
+            ROOT
+            / "projects/understanding_gpu_architecture/build_manifests/example_script.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    clip = build_full_video_clip(
+        script,
+        manifest,
+        ASSETS,
+        ROOT / "projects/understanding_gpu_architecture",
+    )
+    try:
+        assert clip.duration > 0
+        assert all(scene.get("bg") in {inherited, None} for scene in script["scenes"])
+    finally:
+        clip.close()
+
+
 def test_animated_caption_is_blank_then_advances_and_holds_final_word() -> None:
     """Aligned scene captions are transparent before speech and cache active states."""
     script = _script("example_script.json")
