@@ -46,3 +46,13 @@ def test_segment_cache_key_changes_when_voice_or_text_changes(tmp_path: Path) ->
     assert find_cached_segment(tmp_path, original, "model") is not None
     assert find_cached_segment(tmp_path, changed_voice, "model") is None
     assert find_cached_segment(tmp_path, changed_text, "model") is None
+
+
+def test_segment_cache_key_changes_when_speed_changes(tmp_path: Path) -> None:
+    segment = NarrationSegment("segment-1", "scene-1", "Hello.", "voice-a", 0, 0)
+    result = NarrationSegmentResult(segment, b"audio", [WordTimestamp("Hello.", 0.0, 0.5)])
+
+    write_cached_segment(tmp_path, result, "model", 1.0)
+
+    assert find_cached_segment(tmp_path, segment, "model", 1.0) is not None
+    assert find_cached_segment(tmp_path, segment, "model", 1.1) is None

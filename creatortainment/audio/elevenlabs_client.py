@@ -90,11 +90,13 @@ class ElevenLabsNarrationClient:
         *,
         voice_id: str,
         model_id: str = "eleven_flash_v2_5",
+        speed: float = 1.0,
         debug_log: Path | None = None,
     ) -> None:
         self.api_key = api_key
         self.voice_id = voice_id
         self.model_id = model_id
+        self.speed = speed
         self.debug_log = debug_log
 
     def _debug(self, message: str) -> None:
@@ -114,6 +116,7 @@ class ElevenLabsNarrationClient:
             raise RuntimeError("ELEVENLABS_API_KEY is required for real narration generation.")
         try:
             from elevenlabs.client import ElevenLabs
+            from elevenlabs.types.voice_settings import VoiceSettings
         except ImportError as exc:
             raise RuntimeError(
                 "The ElevenLabs SDK is required for live narration. "
@@ -126,6 +129,7 @@ class ElevenLabsNarrationClient:
                 model_id=self.model_id,
                 text=text,
                 output_format="mp3_44100_128",
+                voice_settings=VoiceSettings(speed=self.speed),
             )
         except Exception as exc:
             self._debug(f"request failed type={type(exc).__name__} message={exc}")
@@ -225,6 +229,7 @@ class ElevenLabsNarrationClient:
             raise RuntimeError("ELEVENLABS_API_KEY is required for real narration generation.")
         try:
             from elevenlabs.client import ElevenLabs
+            from elevenlabs.types.voice_settings import VoiceSettings
         except ImportError as exc:
             raise RuntimeError(
                 "The ElevenLabs SDK is required for live narration. "
@@ -237,6 +242,7 @@ class ElevenLabsNarrationClient:
                 model_id=self.model_id,
                 text=text,
                 output_format="mp3_44100_128",
+                voice_settings=VoiceSettings(speed=self.speed),
             )
             audio_base64, alignment, response_fields = _response_values(response)
             self._debug(

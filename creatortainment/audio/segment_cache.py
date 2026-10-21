@@ -15,12 +15,14 @@ from .tokenize import spoken_words
 def narration_segment_hash(
     segment: NarrationSegment,
     model: str,
+    speed: float = 1.0,
 ) -> str:
     value = json.dumps(
         {
             "text": segment.text,
             "voice_id": segment.voice_id,
             "model": model,
+            "speed": speed,
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -32,8 +34,9 @@ def find_cached_segment(
     narrations_dir: Path,
     segment: NarrationSegment,
     model: str,
+    speed: float = 1.0,
 ) -> NarrationSegmentResult | None:
-    cache_key = narration_segment_hash(segment, model)
+    cache_key = narration_segment_hash(segment, model, speed)
     sidecar_path = narrations_dir / f"segment_{cache_key}.json"
     audio_path = narrations_dir / f"segment_{cache_key}.mp3"
     if not sidecar_path.is_file() or not audio_path.is_file():
@@ -69,9 +72,10 @@ def write_cached_segment(
     narrations_dir: Path,
     result: NarrationSegmentResult,
     model: str,
+    speed: float = 1.0,
 ) -> tuple[Path, Path]:
     narrations_dir.mkdir(parents=True, exist_ok=True)
-    cache_key = narration_segment_hash(result.segment, model)
+    cache_key = narration_segment_hash(result.segment, model, speed)
     audio_path = narrations_dir / f"segment_{cache_key}.mp3"
     sidecar_path = narrations_dir / f"segment_{cache_key}.json"
     audio_path.write_bytes(result.audio_bytes)
@@ -81,6 +85,7 @@ def write_cached_segment(
         "text": result.segment.text,
         "voice_id": result.segment.voice_id,
         "tts_model": model,
+        "speed": speed,
         "word_timestamps": [
             WordTimestamp(
                 word=timestamp.word,
@@ -101,8 +106,9 @@ def cached_segment_paths(
     narrations_dir: Path,
     segment: NarrationSegment,
     model: str,
+    speed: float = 1.0,
 ) -> tuple[Path, Path]:
-    cache_key = narration_segment_hash(segment, model)
+    cache_key = narration_segment_hash(segment, model, speed)
     return (
         narrations_dir / f"segment_{cache_key}.mp3",
         narrations_dir / f"segment_{cache_key}.json",

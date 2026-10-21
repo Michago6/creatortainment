@@ -148,6 +148,30 @@ Every script that contains narration must provide a voice ID.
 
 The voice ID affects which voice is used, not the basic project structure.
 
+## 3.3 Narration speed
+
+`project.speed` optionally controls the speed used by ElevenLabs during TTS
+generation. It accepts values from `0.7` through `1.2`, inclusive, and defaults
+to `1.0` when omitted:
+
+```json
+"project": {
+  "voice_id": "VOICE_ID",
+  "speed": 1.1
+}
+```
+
+Speed changes the generated narration and its returned alignment timestamps. It
+does not change MoviePy playback speed and is never applied as post-processing.
+The setting applies to legacy narration and every multi-voice segment. Changing
+it creates a different narration cache identity.
+
+Model capabilities constrain these options: Eleven v3, Eleven v3 Conversational,
+Eleven v4, and Eleven v4 Turbo support expressive audio tags but do not provide
+speed control, so they require the default `speed` of `1.0`. Models with
+documented speed control accept the full `0.7`-`1.2` range. Models without
+audio-tag support must not be used with recognized directive-shaped tags.
+
 ## 3.3 Aspect ratio and resolution
 
 `aspect_ratio` is a human-readable label.

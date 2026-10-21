@@ -18,6 +18,7 @@ from .audio.alignment import align_scenes
 from .audio.elevenlabs_client import ElevenLabsNarrationClient
 from .audio.manifest import (
     DEFAULT_TTS_MODEL,
+    DEFAULT_TTS_SPEED,
     AUDIO_DURATION_TOLERANCE_SEC,
     audio_duration_sec,
     cached_words_match,
@@ -52,7 +53,11 @@ from .schema.validate import (
     load_script,
     validate_script,
 )
-from .provider_validation import validate_elevenlabs_values, validate_fal_models
+from .provider_validation import (
+    validate_elevenlabs_capabilities,
+    validate_elevenlabs_values,
+    validate_fal_models,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -338,6 +343,27 @@ def validate_command(script_path: Path, asset_gen_info: bool = False) -> int:
     }
     if not result.errors:
         normalize_segments = getattr(script, "normalized_narration_segments", None)
+        if callable(normalize_segments):
+            narration_texts = [segment.text for segment in normalize_segments()]
+        else:
+            narration_texts = []
+            for scene in script.get("scenes", []):
+                segments = scene.get("narration_segments")
+                if isinstance(segments, list):
+                    narration_texts.extend(
+                        item["text"]
+                        for item in segments
+                        if isinstance(item, dict) and isinstance(item.get("text"), str)
+                    )
+                elif isinstance(scene.get("narration_text"), str):
+                    narration_texts.append(scene["narration_text"])
+        result.errors.extend(
+            validate_elevenlabs_capabilities(
+                script["project"]["tts_model"],
+                script["project"].get("speed", DEFAULT_TTS_SPEED),
+                narration_texts,
+            )
+        )
         segment_voice_ids = (
             {
                 segment.voice_id
@@ -536,6 +562,7 @@ def find_matching_narration(
     project_dir: Path,
     expected_hash: str,
     expected_text: str | None = None,
+    expected_speed: float = DEFAULT_TTS_SPEED,
 ) -> tuple[Path, list[dict[str, Any]]] | None:
     """Find any retained narration sidecar matching the requested hash."""
     narrations_dir = project_dir / "narrations"
@@ -553,7 +580,7 @@ def find_matching_narration(
             not isinstance(text, str)
             or not isinstance(model, str)
             or not isinstance(timestamps, list)
-            or narration_hash_for_text(text, model) != expected_hash
+            or narration_hash_for_text(text, model, expected_speed) != expected_hash
             or (
                 expected_text is not None
                 and not cached_words_match(text, timestamps)
@@ -586,6 +613,7 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
     incoming_hash = narration_hash(script)
     initialized = project_state_path(project_dir).is_file()
     model = script["project"].get("tts_model", DEFAULT_TTS_MODEL)
+    speed = script["project"].get("speed", DEFAULT_TTS_SPEED)
     voice_id = script["project"].get("voice_id")
     if not isinstance(voice_id, str) or not voice_id.strip():
         raise RuntimeError(
@@ -596,6 +624,7 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
             project_dir,
             incoming_hash,
             narration_text_and_pauses(script["scenes"])[0],
+            speed,
         )
         if initialized
         else None
@@ -619,6 +648,8 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
             manifest = {
                 "narration_hash": incoming_hash,
                 "narration_audio_path": str(audio_path.relative_to(project_dir)),
+                "tts_model": model,
+                "speed": speed,
                 "word_timestamps": timestamps,
                 "scenes": [
                     scene.to_dict()
@@ -636,6 +667,7 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
             state.update({"title": title, "date": script["project"].get("date"), "updated_at": datetime.now(timezone.utc).isoformat()})
             state["narration_hash"] = incoming_hash
             state["tts_model"] = model
+            state["speed"] = speed
             write_project_state(project_state_path(project_dir), state)
             shutil.copy2(script_path, project_dir / "script.json")
             print("Project metadata updated; existing narration remains active.")
@@ -651,6 +683,7 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
         api_key,
         voice_id=voice_id,
         model_id=model,
+        speed=speed,
         debug_log=debug_log,
     )
     normalized_segments = script.normalized_narration_segments()
@@ -661,16 +694,16 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
         generated = 0
         reused = 0
         for segment in normalized_segments:
-            cached_segment = find_cached_segment(narrations_dir, segment, model)
+            cached_segment = find_cached_segment(narrations_dir, segment, model, speed)
             if cached_segment is not None:
                 segment_results.append(cached_segment)
                 segment_audio_paths.append(
-                    cached_segment_paths(narrations_dir, segment, model)[0]
+                    cached_segment_paths(narrations_dir, segment, model, speed)[0]
                 )
                 reused += 1
                 continue
             result = client.synthesize_segments([segment])[0]
-            audio_path, _ = write_cached_segment(narrations_dir, result, model)
+            audio_path, _ = write_cached_segment(narrations_dir, result, model, speed)
             segment_results.append(result)
             segment_audio_paths.append(audio_path)
             generated += 1
@@ -681,6 +714,7 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
             segment_results,
             segment_audio_paths,
             model,
+            speed,
         )
         write_manifest(variant_manifest_path(project_dir, script_path), manifest)
         print(
@@ -710,6 +744,7 @@ def align_command(script_path: Path, force_audio: bool, debug: bool) -> int:
     sidecar_path.write_text(json.dumps({
         "narration_text": " ".join(scene["narration_text"].strip() for scene in script["scenes"]),
         "tts_model": model,
+        "speed": speed,
         "word_timestamps": timestamps,
         "created_at": now.isoformat(),
     }, indent=2) + "\n", encoding="utf-8")

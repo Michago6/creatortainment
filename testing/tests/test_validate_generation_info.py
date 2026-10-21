@@ -5,10 +5,59 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from creatortainment import cli
 from creatortainment import provider_validation
 from creatortainment.schema.models import ScriptModel
 from creatortainment.schema.validate import asset_generation_plans, validate_script
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["eleven_v3", "eleven_v3_conversational", "eleven_v4", "eleven_v4_turbo"],
+)
+def test_v4_models_reject_non_default_speed_but_allow_tags(model: str) -> None:
+    errors = provider_validation.validate_elevenlabs_capabilities(
+        model, 1.1, ["[whispers] Hello."]
+    )
+    assert any("does not support speed control" in error for error in errors)
+    assert not any("audio tags" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["eleven_v3", "eleven_v3_conversational", "eleven_v4", "eleven_v4_turbo"],
+)
+def test_tag_models_accept_omitted_or_default_speed(model: str) -> None:
+    assert provider_validation.validate_elevenlabs_capabilities(model) == []
+    assert provider_validation.validate_elevenlabs_capabilities(model, 1.0) == []
+
+
+def test_speed_capability_accepts_default_and_rejects_tags_for_flash() -> None:
+    assert provider_validation.validate_elevenlabs_capabilities(
+        "eleven_flash_v2_5", 1.0, []
+    ) == []
+    errors = provider_validation.validate_elevenlabs_capabilities(
+        "eleven_flash_v2_5", 1.0, ["[laughs] Hello."]
+    )
+    assert any("does not support audio tags" in error for error in errors)
+
+
+def test_ordinary_bracketed_text_is_not_treated_as_audio_tag() -> None:
+    assert provider_validation.validate_elevenlabs_capabilities(
+        "eleven_flash_v2_5", 1.0, ["Use [section 2] for details."]
+    ) == []
+
+
+def test_multi_voice_tag_capability_checks_each_segment() -> None:
+    errors = provider_validation.validate_elevenlabs_capabilities(
+        "eleven_flash_v2_5",
+        1.0,
+        ["First line.", "[curious] Second line."],
+    )
+    assert len(errors) == 1
+    assert "curious" in errors[0]
 
 
 def script_with_assets(

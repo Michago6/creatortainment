@@ -7,7 +7,7 @@ import math
 from typing import Annotated, Any, Literal
 
 try:
-    from pydantic import BaseModel, ConfigDict, Field, model_validator
+    from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
         "Pydantic is required for schema models. Install the project's full extras."
@@ -216,6 +216,7 @@ class ProjectModel(ScriptModelBase):
     fps: int
     tts_model: str = Field(default="eleven_flash_v2_5", min_length=1)
     voice_id: str = Field(min_length=1)
+    speed: float = Field(default=1.0, ge=0.7, le=1.2)
     generation_defaults: dict[
         Literal["text_to_image", "image_to_image", "text_to_audio", "audio_to_audio"],
         str | None,
@@ -228,6 +229,15 @@ class ProjectModel(ScriptModelBase):
         if not self.voice_id.strip():
             raise ValueError("project voice_id must be a non-empty string")
         return self
+
+    @field_validator("speed", mode="before")
+    @classmethod
+    def validate_speed_type(cls, value: Any) -> Any:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("project speed must be a number between 0.7 and 1.2")
+        if not math.isfinite(float(value)):
+            raise ValueError("project speed must be a finite number between 0.7 and 1.2")
+        return value
 
 
 class SceneModel(ScriptModelBase):

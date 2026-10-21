@@ -1,5 +1,9 @@
 """Offline tests for ElevenLabs response parsing and tokenizer alignment."""
 
+import base64
+import sys
+import types
+
 import pytest
 
 from creatortainment.audio.elevenlabs_client import (
@@ -95,3 +99,42 @@ def test_segment_word_timestamp_serialization_preserves_legacy_shape_when_unanno
         "start": 0.0,
         "end": 0.5,
     }
+
+
+def test_tts_requests_use_speed_for_legacy_and_segment_generation(monkeypatch) -> None:
+    calls = []
+
+    class FakeTTS:
+        def convert_with_timestamps(self, **kwargs):
+            calls.append(kwargs)
+            text = kwargs["text"]
+            return {
+                "audio_base64": base64.b64encode(b"audio").decode(),
+                "alignment": {
+                    "characters": list(text),
+                    "character_start_times_seconds": [index * 0.1 for index in range(len(text))],
+                    "character_end_times_seconds": [(index + 1) * 0.1 for index in range(len(text))],
+                },
+            }
+
+    class FakeElevenLabs:
+        def __init__(self, api_key):
+            self.text_to_speech = FakeTTS()
+
+    fake_client = types.ModuleType("elevenlabs.client")
+    fake_client.ElevenLabs = FakeElevenLabs
+    monkeypatch.setitem(sys.modules, "elevenlabs.client", fake_client)
+
+    client = ElevenLabsNarrationClient(
+        "offline",
+        voice_id="voice-default",
+        model_id="eleven_v4",
+        speed=1.1,
+    )
+    client.synthesize([{"narration_text": "Hello."}])
+    client.synthesize_segments(
+        [NarrationSegment("segment", "scene", "Hello.", "voice-segment", 0, 0)]
+    )
+
+    assert [call["voice_settings"].speed for call in calls] == [1.1, 1.1]
+    assert all(call["model_id"] == "eleven_v4" for call in calls)

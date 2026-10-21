@@ -55,6 +55,23 @@ def test_music_union_supports_legacy_start_and_stop_shapes() -> None:
     assert isinstance(model.scenes[1].bg_music, BgMusicStopModel)
 
 
+def test_project_speed_defaults_to_one_and_accepts_inclusive_bounds() -> None:
+    base = json.loads((SCRIPTS / "example_script.json").read_text(encoding="utf-8"))
+    assert ScriptModel.model_validate(base).project.speed == 1.0
+    for speed in (0.7, 1.2):
+        candidate = json.loads(json.dumps(base))
+        candidate["project"]["speed"] = speed
+        assert ScriptModel.model_validate(candidate).project.speed == speed
+
+
+@pytest.mark.parametrize("speed", [0.69, 1.21, "fast", True])
+def test_project_speed_rejects_invalid_values(speed) -> None:
+    base = json.loads((SCRIPTS / "example_script.json").read_text(encoding="utf-8"))
+    base["project"]["speed"] = speed
+    with pytest.raises(ValidationError):
+        ScriptModel.model_validate(base)
+
+
 @pytest.mark.parametrize(
     "transition",
     [

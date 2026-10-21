@@ -47,3 +47,8 @@ def spoken_tokens(text: str) -> list[SpokenToken]:
 
 def spoken_words(text: str) -> list[str]:
     return [token.word for token in spoken_tokens(text)]
+
+
+def recognized_audio_tags(text: str) -> list[str]:
+    """Return supported directive-shaped audio tags in authored narration."""
+    return [match.group() for match in AUDIO_TAG_PATTERN.finditer(text)]

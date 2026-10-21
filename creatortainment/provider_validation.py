@@ -8,6 +8,56 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from . import config
+from .audio.tokenize import recognized_audio_tags
+
+
+MODEL_CAPABILITIES: dict[str, dict[str, bool]] = {
+    "eleven_v4": {"speed": False, "audio_tags": True},
+    "eleven_v4_turbo": {"speed": False, "audio_tags": True},
+    "eleven_v3": {"speed": False, "audio_tags": True},
+    "eleven_v3_conversational": {"speed": False, "audio_tags": True},
+    "eleven_flash_v2": {"speed": True, "audio_tags": False},
+    "eleven_flash_v2_5": {"speed": True, "audio_tags": False},
+    "eleven_multilingual_v2": {"speed": True, "audio_tags": False},
+}
+
+
+def validate_elevenlabs_capabilities(
+    model_id: str,
+    speed: float = 1.0,
+    narration_texts: list[str] | None = None,
+) -> list[str]:
+    """Validate script features against documented model capabilities."""
+    capabilities = MODEL_CAPABILITIES.get(model_id)
+    tags = [
+        tag
+        for text in narration_texts or []
+        for tag in recognized_audio_tags(text)
+    ]
+    errors: list[str] = []
+    if capabilities is None:
+        if speed != 1.0:
+            errors.append(
+                f"ElevenLabs model {model_id!r} has no known speed capability; "
+                "non-default project.speed cannot be validated safely."
+            )
+        if tags:
+            errors.append(
+                f"ElevenLabs model {model_id!r} has no known audio-tag capability; "
+                f"recognized tags {sorted(set(tags))!r} cannot be validated safely."
+            )
+        return errors
+    if speed != 1.0 and not capabilities["speed"]:
+        errors.append(
+            f"ElevenLabs model {model_id!r} does not support speed control; "
+            f"project.speed={speed:g} is not allowed. Use the default 1.0."
+        )
+    if tags and not capabilities["audio_tags"]:
+        errors.append(
+            f"ElevenLabs model {model_id!r} does not support audio tags; "
+            f"recognized tags: {sorted(set(tags))!r}."
+        )
+    return errors
 
 
 def _safe_error_detail(exc: Exception) -> str:

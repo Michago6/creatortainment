@@ -20,9 +20,11 @@ from .tokenize import spoken_words
 
 DEFAULT_TTS_MODEL = "eleven_flash_v2_5"
 AUDIO_DURATION_TOLERANCE_SEC = 0.1
+DEFAULT_TTS_SPEED = 1.0
 
 
 def narration_hash(script: dict[str, Any]) -> str:
+    speed = _project_value(script, "speed", DEFAULT_TTS_SPEED)
     normalized = _normalized_segments(script)
     if normalized is not None and _has_segment_syntax(script):
         model = _project_value(script, "tts_model", DEFAULT_TTS_MODEL)
@@ -33,15 +35,17 @@ def narration_hash(script: dict[str, Any]) -> str:
             ],
             separators=(",", ":"),
         )
-        return narration_hash_for_text(value, model)
+        return narration_hash_for_text(value, model, speed)
     text, _ = narration_text_and_pauses(script["scenes"])
     model = script.get("project", {}).get("tts_model", DEFAULT_TTS_MODEL)
-    return narration_hash_for_text(text, model)
+    return narration_hash_for_text(text, model, speed)
 
 
-def narration_hash_for_text(text: str, model: str = DEFAULT_TTS_MODEL) -> str:
+def narration_hash_for_text(
+    text: str, model: str = DEFAULT_TTS_MODEL, speed: float = DEFAULT_TTS_SPEED
+) -> str:
     """Return the cache hash used for narration sidecar text and model."""
-    return hashlib.sha256(f"{text}\n{model}".encode("utf-8")).hexdigest()
+    return hashlib.sha256(f"{text}\n{model}\n{speed:.12g}".encode("utf-8")).hexdigest()
 
 
 def validate_audio_timing(audio_duration: float, timestamp_end: float) -> None:
@@ -340,6 +344,7 @@ def build_segment_manifest(
     results: list[NarrationSegmentResult],
     audio_paths: list[Path],
     model: str,
+    speed: float = DEFAULT_TTS_SPEED,
 ) -> dict[str, Any]:
     """Build a manifest from independently aligned sequential narration segments."""
     segments = _normalized_segments(script)
@@ -454,6 +459,7 @@ def build_segment_manifest(
         "word_timestamps": flattened,
         "scenes": scenes,
         "tts_model": model,
+        "speed": speed,
     }
     write_manifest(manifest_path, manifest)
     return manifest
@@ -486,8 +492,9 @@ def build_manifest(
         from .segment_cache import write_cached_segment
 
         model = _project_value(script, "tts_model", DEFAULT_TTS_MODEL)
+        speed = _project_value(script, "speed", DEFAULT_TTS_SPEED)
         for result in results:
-            audio_path, _ = write_cached_segment(narrations_dir, result, model)
+            audio_path, _ = write_cached_segment(narrations_dir, result, model, speed)
             audio_paths.append(audio_path)
         return (
             build_segment_manifest(
@@ -517,6 +524,8 @@ def build_manifest(
     manifest = {
         "narration_hash": current_hash,
         "narration_audio_path": str(audio_path),
+        "tts_model": _project_value(script, "tts_model", DEFAULT_TTS_MODEL),
+        "speed": _project_value(script, "speed", DEFAULT_TTS_SPEED),
         "word_timestamps": timestamps,
         "scenes": [scene.to_dict() for scene in scenes],
     }

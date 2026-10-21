@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .audio.manifest import DEFAULT_TTS_MODEL, narration_hash
+from .audio.manifest import DEFAULT_TTS_MODEL, DEFAULT_TTS_SPEED, narration_hash
 
 
 def slugify(title: str, max_length: int = 80) -> str:
@@ -54,6 +54,7 @@ def new_state(script: dict[str, Any], now: datetime | None = None) -> dict[str, 
         "date": project.get("date"),
         "narration_hash": narration_hash(script),
         "tts_model": project.get("tts_model", DEFAULT_TTS_MODEL),
+        "speed": project.get("speed", DEFAULT_TTS_SPEED),
         "updated_at": current.isoformat(),
     }
 
