@@ -96,6 +96,43 @@ class ElementModel(ScriptModelBase):
     keyframes: list[KeyframeModel] = Field(min_length=1)
 
 
+class CameraMoveModel(ScriptModelBase):
+    from_word_index: int = Field(ge=0)
+    to_word_index: int = Field(ge=0)
+    target_element_id: str = Field(min_length=1)
+    from_magnification: float = Field(ge=1.0)
+    to_magnification: float = Field(ge=1.0)
+    easing: str = "linear"
+
+    @model_validator(mode="after")
+    def validate_camera_values(self) -> "CameraMoveModel":
+        if self.to_word_index < self.from_word_index:
+            raise ValueError("camera move to_word_index must be >= from_word_index")
+        if not all(
+            math.isfinite(value)
+            for value in (self.from_magnification, self.to_magnification)
+        ):
+            raise ValueError("camera magnification values must be finite")
+        if self.easing not in {
+            "instant", "linear", "ease_in", "ease_out", "ease_in_out", "bounce"
+        }:
+            raise ValueError(f"unknown camera easing {self.easing!r}")
+        return self
+
+
+class CameraModel(ScriptModelBase):
+    moves: list[CameraMoveModel] = Field(default_factory=list)
+    initial_magnification: float = Field(default=1.0, ge=1.0)
+
+    @model_validator(mode="after")
+    def validate_initial_state(self) -> "CameraModel":
+        if not math.isfinite(self.initial_magnification):
+            raise ValueError("camera initial_magnification must be finite")
+        if self.initial_magnification != 1.0:
+            raise ValueError("camera initial_magnification must be 1.0")
+        return self
+
+
 class SfxCueModel(ScriptModelBase):
     asset: str
     trigger_word_index: int
@@ -254,6 +291,7 @@ class SceneModel(ScriptModelBase):
     bg_music: BgMusicModel | None = None
     sfx: list[SfxCueModel] = Field(default_factory=list)
     elements: list[ElementModel] = Field(default_factory=list)
+    camera: CameraModel | None = None
 
     @model_validator(mode="after")
     def validate_narration_definition(self) -> "SceneModel":

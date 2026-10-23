@@ -292,6 +292,22 @@ A scene follows this conceptual shape:
 }
 ```
 
+### Camera moves
+
+Optional camera moves target element centers over spoken-word ranges. Indexes
+are 0-based, `to_word_index` is exclusive and may equal the scene word count;
+audio tags do not consume indexes. Ordered moves may have gaps, and adjacent
+magnification values must be continuous:
+
+```json
+"camera": {"initial_magnification": 1.0, "moves": [
+  {"from_word_index": 0, "to_word_index": 4, "target_element_id": "hero",
+   "from_magnification": 1.0, "to_magnification": 1.4, "easing": "ease_in_out"},
+  {"from_word_index": 7, "to_word_index": 10, "target_element_id": "detail",
+   "from_magnification": 1.4, "to_magnification": 1.8, "easing": "ease_out"}
+]}
+```
+
 ## 5.1 Scene order
 
 The `scenes` array is the authoritative playback order.

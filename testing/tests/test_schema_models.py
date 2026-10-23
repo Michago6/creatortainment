@@ -64,6 +64,94 @@ def test_project_speed_defaults_to_one_and_accepts_inclusive_bounds() -> None:
         assert ScriptModel.model_validate(candidate).project.speed == speed
 
 
+def test_camera_moves_use_scene_local_spoken_word_ranges_and_element_ids() -> None:
+    script = json.loads(
+        (SCRIPTS / "example_script.json").read_text(encoding="utf-8")
+    )
+    scene = script["scenes"][0]
+    scene["narration_text"] = "[whispers] " + scene["narration_text"]
+    scene["camera"] = {
+        "moves": [
+            {
+                "from_word_index": 0,
+                "to_word_index": 2,
+                "target_element_id": "main_character",
+                "from_magnification": 1.0,
+                "to_magnification": 1.4,
+                "easing": "ease_in_out",
+            },
+            {
+                "from_word_index": 2,
+                "to_word_index": 4,
+                "target_element_id": "gpu_diagram",
+                "from_magnification": 1.4,
+                "to_magnification": 1.8,
+                "easing": "ease_out",
+            },
+        ]
+    }
+    result = validate_script(ScriptModel.model_validate(script), ROOT / "testing/assets")
+    assert result.valid, result.errors
+
+
+@pytest.mark.parametrize(
+    "camera",
+    [
+        {
+            "moves": [
+                {
+                    "from_word_index": 0,
+                    "to_word_index": 2,
+                    "target_element_id": "missing",
+                    "from_magnification": 1.0,
+                    "to_magnification": 1.2,
+                }
+            ]
+        },
+        {
+            "moves": [
+                {
+                    "from_word_index": 2,
+                    "to_word_index": 2,
+                    "target_element_id": "main_character",
+                    "from_magnification": 1.0,
+                    "to_magnification": 1.2,
+                }
+            ]
+        },
+        {
+            "moves": [
+                {
+                    "from_word_index": 0,
+                    "to_word_index": 2,
+                    "target_element_id": "main_character",
+                    "from_magnification": 1.0,
+                    "to_magnification": 1.2,
+                },
+                {
+                    "from_word_index": 2,
+                    "to_word_index": 4,
+                    "target_element_id": "gpu_diagram",
+                    "from_magnification": 1.1,
+                    "to_magnification": 1.4,
+                },
+            ]
+        },
+    ],
+)
+def test_camera_moves_reject_invalid_targets_ranges_and_discontinuities(
+    camera: dict,
+) -> None:
+    script = json.loads(
+        (SCRIPTS / "example_script.json").read_text(encoding="utf-8")
+    )
+    script["scenes"][0]["camera"] = camera
+    result = validate_script(
+        ScriptModel.model_validate(script), ROOT / "testing/assets"
+    )
+    assert not result.valid
+
+
 @pytest.mark.parametrize("speed", [0.69, 1.21, "fast", True])
 def test_project_speed_rejects_invalid_values(speed) -> None:
     base = json.loads((SCRIPTS / "example_script.json").read_text(encoding="utf-8"))

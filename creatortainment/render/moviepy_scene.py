@@ -38,6 +38,125 @@ from ..timeline import timed_element
 SOFT_PUSH_FEATHER_FRAC = 0.25
 
 
+def _camera_value(value: Any, key: str, default: Any = None) -> Any:
+    return value.get(key, default) if isinstance(value, dict) else getattr(value, key, default)
+
+
+def _camera_clip(
+    content: VideoClip,
+    scene: dict[str, Any],
+    scene_manifest: dict[str, Any],
+    manifest: dict[str, Any],
+    resolution: tuple[int, int],
+) -> VideoClip:
+    """Apply a scene camera to composited visual layers (captions are added later)."""
+    camera = _camera_value(scene, "camera")
+    moves = _camera_value(camera, "moves", []) if camera is not None else []
+    if not moves:
+        return content
+    timestamps = manifest.get("word_timestamps", [])
+    word_offset = int(scene_manifest.get("word_offset", 0))
+    scene_start = float(scene_manifest["start_time_sec"])
+    scene_end = float(scene_manifest["end_time_sec"])
+    duration = float(content.duration)
+    elements = scene.get("elements", [])
+    by_id = {
+        str(_camera_value(element, "id")): element
+        for element in elements
+    }
+    cache = AssetDimensionCache()
+    registry = manifest.get("_asset_registry", {})
+    assets_root = manifest.get("_assets_root")
+
+    def move_times(move: Any) -> tuple[float, float]:
+        first = int(_camera_value(move, "from_word_index"))
+        last = int(_camera_value(move, "to_word_index"))
+        start = (
+            float(timestamps[word_offset + first]["start"])
+            if word_offset + first < len(timestamps)
+            else scene_start
+        )
+        end = (
+            float(timestamps[word_offset + last]["start"])
+            if word_offset + last < len(timestamps)
+            else scene_end
+        )
+        return max(scene_start, start), min(scene_end, max(start, end))
+
+    intervals = [(move, *move_times(move)) for move in moves]
+    canvas_width, canvas_height = resolution
+    initial_center = (canvas_width / 2.0, canvas_height / 2.0)
+    def target_center(move: Any, absolute_time: float) -> tuple[float, float]:
+        element = by_id.get(str(_camera_value(move, "target_element_id")))
+        if element is None:
+            return initial_center
+        try:
+            timed = timed_element(element, scene, scene_manifest, manifest)
+            state = resolve_element_state(timed, absolute_time)
+            x, y = (float(state["pos"][0]), float(state["pos"][1]))
+            element_width = element_height = 0.0
+            if assets_root is not None:
+                path = _asset_path(registry, _camera_value(element, "asset"), assets_root)
+                native_width, native_height = cache.dimensions(path)
+                if state["size_field_name"] == "target_height_frac":
+                    element_height = state["size_value"] * canvas_height
+                    element_width = native_width * element_height / max(1, native_height)
+                else:
+                    element_width = state["size_value"] * canvas_width
+                    element_height = native_height * element_width / max(1, native_width)
+            anchor = _camera_value(element, "anchor", "center")
+            if anchor == "top_left":
+                return (x + element_width / 2, y + element_height / 2)
+            if anchor == "bottom_center":
+                return (x, y - element_height / 2)
+            return (x, y)
+        except (KeyError, ValueError, TypeError):
+            return initial_center
+
+    def camera_state(absolute: float) -> tuple[tuple[float, float], float]:
+        center = initial_center
+        magnification = 1.0
+        for move, start, end in intervals:
+            if absolute < start:
+                break
+            from_mag = float(_camera_value(move, "from_magnification"))
+            to_mag = float(_camera_value(move, "to_magnification"))
+            if absolute >= end:
+                center = target_center(move, end)
+                magnification = to_mag
+                continue
+            span = max(1e-9, end - start)
+            raw = max(0.0, min(1.0, (absolute - start) / span))
+            easing = str(_camera_value(move, "easing", "linear"))
+            from .keyframes import EASINGS
+            progress = EASINGS[easing](raw)
+            destination = target_center(move, absolute)
+            center = (
+                center[0] + (destination[0] - center[0]) * progress,
+                center[1] + (destination[1] - center[1]) * progress,
+            )
+            magnification = from_mag + (to_mag - from_mag) * progress
+            break
+        return center, magnification
+
+    def frame(local_time: float) -> np.ndarray:
+        absolute = scene_start + float(local_time)
+        center, magnification = camera_state(absolute)
+        source = Image.fromarray(content.get_frame(local_time)).convert("RGB")
+        if magnification <= 1.000001:
+            return np.asarray(source)
+        scaled = source.resize(
+            (max(canvas_width, round(canvas_width * magnification)), max(canvas_height, round(canvas_height * magnification))),
+            Image.Resampling.LANCZOS,
+        )
+        cx, cy = center[0] * magnification, center[1] * magnification
+        left = max(0, min(scaled.width - canvas_width, round(cx - canvas_width / 2)))
+        top = max(0, min(scaled.height - canvas_height, round(cy - canvas_height / 2)))
+        return np.asarray(scaled.crop((left, top, left + canvas_width, top + canvas_height)))
+
+    return VideoClip(frame_function=frame, duration=duration)
+
+
 def effective_backgrounds(script: dict[str, Any]) -> list[str]:
     """Resolve explicit and inherited scene background registry keys."""
     resolver = getattr(script, "effective_backgrounds", None)
@@ -322,6 +441,16 @@ def build_static_scene_clip(
     if manifest is None:
         caption = build_static_caption_clip(script, scene, resolution, duration)
     else:
+        camera = _camera_value(scene, "camera")
+        if _camera_value(camera, "moves", []):
+            visual = CompositeVideoClip(layers, size=resolution).with_duration(duration)
+            camera_manifest = dict(manifest)
+            camera_manifest["_asset_registry"] = registry
+            camera_manifest["_assets_root"] = assets_root
+            visual = _camera_clip(
+                visual, scene, scene_manifest, camera_manifest, resolution
+            )
+            layers = [visual]
         caption = build_animated_caption_clip(
             script,
             scene,

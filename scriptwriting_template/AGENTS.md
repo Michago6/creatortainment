@@ -66,6 +66,9 @@ Discover assets progressively through the global index, category index, and
 asset sidecar. Write scripts using production `assets/...` registry paths.
 Always validate before considering a script complete. Generate a storyboard
 when requested; never start a full video render automatically.
+Scene camera moves use spoken-word indexes and element IDs; validate camera
+sequences before rendering and keep camera examples consistent with the global
+script conventions.
 
 From the repository root, use the normal Creatortainment CLI:
 

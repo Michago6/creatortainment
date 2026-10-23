@@ -232,4 +232,40 @@ def validate_script(
                 )
                 if error:
                     errors.append(error)
+        camera = scene.camera
+        if camera is not None:
+            element_ids = [element.id for element in scene.elements]
+            if len(element_ids) != len(set(element_ids)):
+                errors.append(f"{prefix}.elements IDs must be unique for camera targeting.")
+            previous_to = 0
+            previous_mag = float(camera.initial_magnification)
+            for move_number, move in enumerate(camera.moves):
+                move_path = f"{prefix}.camera.moves[{move_number}]"
+                if move.target_element_id not in element_ids:
+                    errors.append(
+                        f"{move_path}.target_element_id={move.target_element_id!r} "
+                        "does not match a scene element id."
+                    )
+                if move.from_word_index < previous_to:
+                    errors.append(f"{move_path} overlaps or is out of order.")
+                if move.to_word_index < move.from_word_index:
+                    errors.append(f"{move_path}.to_word_index must be >= from_word_index.")
+                if move.to_word_index == move.from_word_index:
+                    errors.append(f"{move_path} must span at least one spoken word.")
+                if move.from_word_index >= len(words):
+                    errors.append(
+                        f"{move_path}.from_word_index={move.from_word_index} "
+                        f"is outside the scene's word range 0..{len(words)}."
+                    )
+                if move.to_word_index > len(words):
+                    errors.append(
+                        f"{move_path}.to_word_index={move.to_word_index} "
+                        f"cannot exceed word count {len(words)}."
+                    )
+                if abs(float(move.from_magnification) - previous_mag) > 1e-6:
+                    errors.append(
+                        f"{move_path}.from_magnification must continue the previous camera state."
+                    )
+                previous_to = move.to_word_index
+                previous_mag = float(move.to_magnification)
     return ValidationResult(script=model, errors=errors)
