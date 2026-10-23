@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1320" viewBox="0 0 1900 1320" role="img" aria-labelledby="title desc">
+  <title id="title">Creatortainment CLI flow</title>
+  <desc id="desc">Flow diagram of validation, asset generation, storyboard, alignment, and rendering commands.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#64748b"/>
+    </marker>
+    <style>
+      .title { font: 700 30px sans-serif; fill: #0f172a; }
+      .label { font: 600 18px sans-serif; fill: #0f172a; }
+      .small { font: 15px sans-serif; fill: #334155; }
+      .cmd { fill: #dbeafe; stroke: #2563eb; }
+      .shared { fill: #f1f5f9; stroke: #64748b; }
+      .audio { fill: #dcfce7; stroke: #16a34a; }
+      .render { fill: #fef3c7; stroke: #d97706; }
+      .output { fill: #fce7f3; stroke: #db2777; }
+      .box { stroke-width: 2; rx: 12; }
+      .arrow { stroke: #64748b; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .branch { stroke: #94a3b8; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1900" height="1320" fill="#ffffff"/>
+  <text x="950" y="48" text-anchor="middle" class="title">Creatortainment CLI flow</text>
+  <text x="950" y="78" text-anchor="middle" class="small">python -m creatortainment &lt;command&gt; script.json</text>
+
+  <rect x="720" y="105" width="460" height="62" class="box cmd"/>
+  <text x="950" y="132" text-anchor="middle" class="label">CLI parser</text>
+  <text x="950" y="154" text-anchor="middle" class="small">load script path and command options</text>
+
+  <path d="M950 167 V205" class="arrow"/>
+  <rect x="720" y="205" width="460" height="68" class="box shared"/>
+  <text x="950" y="234" text-anchor="middle" class="label">load_script()</text>
+  <text x="950" y="257" text-anchor="middle" class="small">JSON -&gt; typed ScriptModel</text>
+
+  <path d="M950 273 V315" class="arrow"/>
+  <rect x="720" y="315" width="460" height="72" class="box shared"/>
+  <text x="950" y="344" text-anchor="middle" class="label">validate_script()</text>
+  <text x="950" y="367" text-anchor="middle" class="small">schema, assets, scenes, words, camera, transitions</text>
+
+  <path d="M720 351 H210 V425" class="branch"/>
+  <path d="M720 351 H600 V425" class="branch"/>
+  <path d="M1180 351 H1250 V425" class="branch"/>
+  <path d="M1180 351 H1640 V425" class="branch"/>
+
+  <rect x="40" y="425" width="340" height="74" class="box cmd"/>
+  <text x="210" y="454" text-anchor="middle" class="label">validate</text>
+  <text x="210" y="478" text-anchor="middle" class="small">provider and capability checks</text>
+
+  <rect x="430" y="425" width="340" height="74" class="box cmd"/>
+  <text x="600" y="454" text-anchor="middle" class="label">generate-assets</text>
+  <text x="600" y="478" text-anchor="middle" class="small">create missing shared assets</text>
+
+  <rect x="1070" y="425" width="340" height="74" class="box cmd"/>
+  <text x="1240" y="454" text-anchor="middle" class="label">storyboard</text>
+  <text x="1240" y="478" text-anchor="middle" class="small">static visual composition</text>
+
+  <rect x="1460" y="425" width="340" height="74" class="box cmd"/>
+  <text x="1630" y="454" text-anchor="middle" class="label">align</text>
+  <text x="1630" y="478" text-anchor="middle" class="small">generate or reuse narration</text>
+
+  <path d="M210 499 V545" class="arrow"/>
+  <rect x="40" y="545" width="340" height="62" class="box output"/>
+  <text x="210" y="572" text-anchor="middle" class="label">Valid / Invalid</text>
+  <text x="210" y="594" text-anchor="middle" class="small">no render or API generation</text>
+
+  <path d="M600 499 V545" class="arrow"/>
+  <rect x="430" y="545" width="340" height="62" class="box output"/>
+  <text x="600" y="572" text-anchor="middle" class="label">Shared assets</text>
+  <text x="600" y="594" text-anchor="middle" class="small">scriptwriting/assets/</text>
+
+  <path d="M1240 499 V545" class="arrow"/>
+  <rect x="1070" y="545" width="340" height="62" class="box output"/>
+  <text x="1240" y="572" text-anchor="middle" class="label">storyboard_*.png</text>
+  <text x="1240" y="594" text-anchor="middle" class="small">backgrounds, elements, captions</text>
+
+  <path d="M1630 499 V535" class="arrow"/>
+  <rect x="1460" y="535" width="340" height="82" class="box audio"/>
+  <text x="1630" y="564" text-anchor="middle" class="label">Cache / ElevenLabs</text>
+  <text x="1630" y="587" text-anchor="middle" class="small">audio, timestamps, decoded duration</text>
+  <text x="1630" y="607" text-anchor="middle" class="small">speed and model-aware identity</text>
+
+  <path d="M1630 617 V655" class="arrow"/>
+  <rect x="1460" y="655" width="340" height="72" class="box audio"/>
+  <text x="1630" y="684" text-anchor="middle" class="label">Build manifest</text>
+  <text x="1630" y="707" text-anchor="middle" class="small">scene and segment timing</text>
+
+  <rect x="720" y="655" width="460" height="72" class="box cmd"/>
+  <text x="950" y="684" text-anchor="middle" class="label">render [--preview]</text>
+  <text x="950" y="707" text-anchor="middle" class="small">requires an existing manifest</text>
+  <path d="M1460 691 H1180" class="arrow"/>
+
+  <path d="M950 727 V765" class="arrow"/>
+  <rect x="720" y="765" width="460" height="72" class="box render"/>
+  <text x="950" y="794" text-anchor="middle" class="label">Build full video clip</text>
+  <text x="950" y="817" text-anchor="middle" class="small">timeline, pauses, backgrounds, transitions</text>
+
+  <path d="M720 801 H210 V875" class="branch"/>
+  <path d="M720 801 H600 V875" class="branch"/>
+  <path d="M1180 801 H1240 V875" class="branch"/>
+  <path d="M1180 801 H1630 V875" class="branch"/>
+
+  <rect x="40" y="875" width="340" height="82" class="box render"/>
+  <text x="210" y="904" text-anchor="middle" class="label">Elements</text>
+  <text x="210" y="927" text-anchor="middle" class="small">keyframes, anchors, opacity, rotation</text>
+  <text x="210" y="947" text-anchor="middle" class="small">animated visual assets</text>
+
+  <rect x="430" y="875" width="340" height="82" class="box render"/>
+  <text x="600" y="904" text-anchor="middle" class="label">Camera</text>
+  <text x="600" y="927" text-anchor="middle" class="small">word-timed zoom and movement</text>
+  <text x="600" y="947" text-anchor="middle" class="small">before captions</text>
+
+  <rect x="1070" y="875" width="340" height="82" class="box render"/>
+  <text x="1240" y="904" text-anchor="middle" class="label">Captions</text>
+  <text x="1240" y="927" text-anchor="middle" class="small">spoken-word timestamps</text>
+  <text x="1240" y="947" text-anchor="middle" class="small">screen-space overlay</text>
+
+  <rect x="1460" y="875" width="340" height="82" class="box render"/>
+  <text x="1630" y="904" text-anchor="middle" class="label">Audio mix</text>
+  <text x="1630" y="927" text-anchor="middle" class="small">narration, music, SFX</text>
+  <text x="1630" y="947" text-anchor="middle" class="small">duration validation</text>
+
+  <path d="M210 957 V1005 H950" class="arrow"/>
+  <path d="M600 957 V1005 H950" class="arrow"/>
+  <path d="M1240 957 V1005 H950" class="arrow"/>
+  <path d="M1630 957 V1005 H950" class="arrow"/>
+  <rect x="720" y="1005" width="460" height="72" class="box render"/>
+  <text x="950" y="1034" text-anchor="middle" class="label">MoviePy encode</text>
+  <text x="950" y="1057" text-anchor="middle" class="small">preview: quarter resolution / faster FPS</text>
+
+  <path d="M950 1077 V1120" class="arrow"/>
+  <rect x="720" y="1120" width="460" height="72" class="box output"/>
+  <text x="950" y="1149" text-anchor="middle" class="label">render_*.mp4</text>
+  <text x="950" y="1172" text-anchor="middle" class="small">projects/&lt;project-slug&gt;/output/</text>
+
+  <text x="950" y="1250" text-anchor="middle" class="small">All commands create or update the project folder and preserve reusable assets separately.</text>
+</svg>

@@ -9,6 +9,16 @@ The project is designed for an enjoyable **iterate → preview → render** loop
 make a small change, check it quickly, and only spend time on a full render
 when everything looks right. ☕🎬
 
+## CLI architecture
+
+The complete command flow, including validation, asset generation, narration
+alignment, caching, storyboard creation, camera animation, rendering, and
+audio mixing, is available as an SVG diagram:
+
+![Creatortainment CLI flow diagram](docs/creatortainment-cli-flow.svg)
+
+[Open the CLI flow diagram at full size](docs/creatortainment-cli-flow.svg)
+
 ## Quick start: script to final video
 
 This walkthrough uses the archived example script:
