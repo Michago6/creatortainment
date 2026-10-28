@@ -907,6 +907,8 @@ def build_full_video_clip(
     manifest: dict[str, Any],
     assets_root: Path,
     project_dir: Path,
+    *,
+    show_scene_numbers: bool = False,
 ):
     """Build scenes on one timeline, overlapping real scene transitions."""
     scenes = script.get("scenes", [])
@@ -1046,6 +1048,32 @@ def build_full_video_clip(
         positioned,
         size=tuple(script["project"]["resolution"]),
     ).with_duration(final_duration)
+    if show_scene_numbers:
+        width, height = tuple(script["project"]["resolution"])
+        overlays = []
+        margin = max(12, round(min(width, height) * 0.035))
+        font_size = max(18, round(height * 0.04))
+        stroke_width = max(2, round(font_size * 0.12))
+        for index, offset in enumerate(scene_offsets, start=1):
+            number = TextClip(
+                font=_caption_font({}),
+                text=str(index),
+                font_size=font_size,
+                color="white",
+                stroke_color="black",
+                stroke_width=stroke_width,
+                method="label",
+            ).with_duration(offset.unit_duration_sec).with_start(
+                offset.final_start_sec
+            )
+            number = number.with_position(
+                (width - number.w - margin, margin)
+            )
+            overlays.append(number)
+        final_clip = CompositeVideoClip(
+            [final_clip, *overlays],
+            size=(width, height),
+        ).with_duration(final_duration).with_audio(final_clip.audio)
     if not audio_layers:
         raise RuntimeError("Final assembled video has no narration audio to mix.")
     narration_timeline = CompositeAudioClip(audio_layers).with_duration(final_duration)

@@ -161,6 +161,51 @@ def test_full_video_concatenates_all_manifest_scenes_in_order() -> None:
         clip.close()
 
 
+def test_preview_scene_numbers_are_fixed_top_right_overlays() -> None:
+    script = _script("example_script.json")
+    manifest = json.loads(
+        (
+            ROOT
+            / "projects/understanding_gpu_architecture/build_manifests/example_script.json"
+        ).read_text(encoding="utf-8")
+    )
+    preview_script = deepcopy(script)
+    preview_script["project"]["resolution"] = [270, 480]
+    clip = build_full_video_clip(
+        preview_script,
+        manifest,
+        ASSETS,
+        ROOT / "projects/understanding_gpu_architecture",
+        show_scene_numbers=True,
+    )
+    normal = build_full_video_clip(
+        preview_script,
+        manifest,
+        ASSETS,
+        ROOT / "projects/understanding_gpu_architecture",
+    )
+    try:
+        overlays = [
+            layer for layer in clip.clips
+            if getattr(layer, "text", None) in {"1", "2", "3"}
+        ]
+        assert [layer.text for layer in overlays] == ["1", "2", "3"]
+        offsets = build_scene_final_offsets(preview_script, manifest)
+        assert [layer.start for layer in overlays] == pytest.approx(
+            [offset.final_start_sec for offset in offsets]
+        )
+        assert all(
+            layer.pos(0) == layer.pos(min(0.1, layer.duration / 2))
+            for layer in overlays
+        )
+        assert all(layer.pos(0)[0] + layer.w <= 270 for layer in overlays)
+        assert all(layer.pos(0)[1] >= 0 for layer in overlays)
+        assert len(normal.clips) == len(preview_script["scenes"])
+    finally:
+        clip.close()
+        normal.close()
+
+
 def test_full_video_inherits_backgrounds_across_scenes() -> None:
     script = deepcopy(_script("example_script.json"))
     inherited = script["scenes"][0]["bg"]

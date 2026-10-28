@@ -469,7 +469,13 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
     except (FileNotFoundError, ValueError) as exc:
         raise RuntimeError(str(exc)) from exc
     render_script = scale_script_for_preview(script) if preview else script
-    clip = build_full_video_clip(render_script, manifest, ASSETS_ROOT, project_dir)
+    clip = build_full_video_clip(
+        render_script,
+        manifest,
+        ASSETS_ROOT,
+        project_dir,
+        show_scene_numbers=preview,
+    )
     encoded_clip = prepare_render_clip(
         clip,
         tuple(script["project"]["resolution"]),
