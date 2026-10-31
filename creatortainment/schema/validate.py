@@ -220,7 +220,7 @@ def validate_script(
                 errors.append(error)
         for element_number, element in enumerate(scene.elements):
             element_path = f"{prefix}.elements[{element_number}]"
-            if element.asset not in model.asset_registry:
+            if element.asset is not None and element.asset not in model.asset_registry:
                 errors.append(
                     f"{element_path}.asset={element.asset!r} is not declared in asset_registry."
                 )

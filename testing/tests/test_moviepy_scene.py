@@ -78,6 +78,82 @@ def test_caption_text_excludes_audio_tags() -> None:
     ) == "Hello there."
 
 
+def test_text_element_renders_transparent_styled_image() -> None:
+    from creatortainment.render.text_elements import text_element_image
+
+    image = text_element_image(
+        {
+            "text": "Hello\nworld",
+            "text_style": {
+                "font_size": 48,
+                "color": "#ffffff",
+                "stroke_color": "#000000",
+                "stroke_width": 3,
+                "alignment": "center",
+                "background_color": "#ff0000",
+                "background_opacity": 0.0,
+                "padding": 8,
+            },
+        }
+    )
+    assert image.mode == "RGBA"
+    assert image.width > 0 and image.height > 0
+    assert image.getchannel("A").getextrema()[0] == 0
+    assert image.getchannel("A").getextrema()[1] == 255
+
+
+def test_text_element_uses_existing_animation_and_anchor_pipeline() -> None:
+    script = _script("example_script.json")
+    script = deepcopy(script)
+    element = script["scenes"][0]["elements"][0]
+    element.pop("asset")
+    element.update(
+        {
+            "text": "Animated title",
+            "text_style": {"font_size": 48, "alignment": "center"},
+            "anchor": "center",
+            "keyframes": [
+                {
+                    "trigger_word_index": 0,
+                    "pos": [300, 300],
+                    "target_width_frac": 0.4,
+                    "opacity": 0.0,
+                },
+                {
+                    "trigger_word_index": 4,
+                    "pos": [500, 500],
+                    "target_width_frac": 0.6,
+                    "opacity": 1.0,
+                    "easing": "ease_in_out",
+                },
+            ],
+        }
+    )
+    scene_manifest = {
+        "start_time_sec": 0.0,
+        "end_time_sec": 2.0,
+        "duration_sec": 2.0,
+        "word_offset": 0,
+        "word_count": 16,
+    }
+    manifest = {
+        "word_timestamps": [
+            {"start": index * 0.25, "end": (index + 1) * 0.25}
+            for index in range(16)
+        ]
+    }
+    clip = build_static_scene_clip(
+        script, script["scenes"][0], scene_manifest, ASSETS, manifest
+    )
+    try:
+        layer = clip.clips[2]
+        assert layer.get_frame(0.1).shape[0] > 0
+        assert layer.pos(1.5) != layer.pos(0.1)
+        assert layer.get_frame(1.5).shape[1] > layer.get_frame(0.1).shape[1]
+    finally:
+        clip.close()
+
+
 def test_extra_duration_keeps_scene_visuals_and_final_caption_active() -> None:
     script = _script("example_script.json")
     script = deepcopy(script)

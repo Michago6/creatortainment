@@ -11,6 +11,7 @@ from moviepy import (
     AudioClip,
     CompositeAudioClip,
     CompositeVideoClip,
+    ImageClip,
     TextClip,
     VideoClip,
     concatenate_videoclips,
@@ -32,6 +33,7 @@ from ..audio.tokenize import spoken_words
 from .mock import AssetDimensionCache, _asset_path
 from .visual_assets import is_animated_visual, load_visual_clip
 from .keyframes import resolve_element_state
+from .text_elements import text_element_image
 from .timeline import build_scene_final_offsets, scene_duration_sec
 from ..timeline import timed_element
 
@@ -95,15 +97,20 @@ def _camera_clip(
             state = resolve_element_state(timed, absolute_time)
             x, y = (float(state["pos"][0]), float(state["pos"][1]))
             element_width = element_height = 0.0
-            if assets_root is not None:
+            if _camera_value(element, "text") is not None:
+                text_width, text_height = text_element_image(element).size
+                native_width, native_height = text_width, text_height
+            elif assets_root is not None:
                 path = _asset_path(registry, _camera_value(element, "asset"), assets_root)
                 native_width, native_height = cache.dimensions(path)
-                if state["size_field_name"] == "target_height_frac":
-                    element_height = state["size_value"] * canvas_height
-                    element_width = native_width * element_height / max(1, native_height)
-                else:
-                    element_width = state["size_value"] * canvas_width
-                    element_height = native_height * element_width / max(1, native_width)
+            else:
+                return initial_center
+            if state["size_field_name"] == "target_height_frac":
+                element_height = state["size_value"] * canvas_height
+                element_width = native_width * element_height / max(1, native_height)
+            else:
+                element_width = state["size_value"] * canvas_width
+                element_height = native_height * element_width / max(1, native_width)
             anchor = _camera_value(element, "anchor", "center")
             if anchor == "top_left":
                 return (x + element_width / 2, y + element_height / 2)
@@ -240,9 +247,14 @@ def _element_clip(
     duration: float,
     dimension_cache: AssetDimensionCache,
 ) -> VideoClip:
-    path = _asset_path(registry, element["asset"], assets_root)
-    image = load_visual_clip(path, duration)
-    native_width, native_height = dimension_cache.dimensions(path)
+    if element.get("text") is not None:
+        text_image = text_element_image(element)
+        native_width, native_height = text_image.size
+        image = ImageClip(np.asarray(text_image), transparent=True).with_duration(duration)
+    else:
+        path = _asset_path(registry, element["asset"], assets_root)
+        image = load_visual_clip(path, duration)
+        native_width, native_height = dimension_cache.dimensions(path)
     keyframe = element["keyframes"][0]
     target_height = keyframe.get("target_height_frac")
     target_width = keyframe.get("target_width_frac")
@@ -303,16 +315,23 @@ def _animated_element_clip(
     dimension_cache: AssetDimensionCache,
 ) -> VideoClip:
     """Create a cropped dynamic clip driven by resolved element states."""
-    path = _asset_path(registry, element["asset"], assets_root)
-    source_clip = load_visual_clip(path, duration) if is_animated_visual(path) else None
-    if source_clip is None:
-        with Image.open(path) as image_file:
-            source = image_file.convert("RGBA")
+    if element.get("text") is not None:
+        path = None
+        source_clip = None
+        source = text_element_image(element)
+        native_width, native_height = source.size
     else:
-        source = None
+        path = _asset_path(registry, element["asset"], assets_root)
+        source_clip = load_visual_clip(path, duration) if is_animated_visual(path) else None
+        if source_clip is None:
+            with Image.open(path) as image_file:
+                source = image_file.convert("RGBA")
+        else:
+            source = None
     timed = timed_element(element, scene, scene_manifest, manifest)
     canvas_width, canvas_height = resolution
-    native_width, native_height = dimension_cache.dimensions(path)
+    if path is not None:
+        native_width, native_height = dimension_cache.dimensions(path)
     cached_time: float | None = None
     cached_frame: Image.Image | None = None
     cached_position: tuple[int, int] = (0, 0)
@@ -343,7 +362,7 @@ def _animated_element_clip(
             alpha = image.getchannel("A").point(lambda value: round(value * opacity))
             image.putalpha(alpha)
         x, y = state["pos"]
-        cached_position = _anchor_position(element["anchor"], x, y, width, height)
+        cached_position = _anchor_position(element["anchor"], x, y, image.width, image.height)
         cached_time = local_time
         cached_frame = image
         return image

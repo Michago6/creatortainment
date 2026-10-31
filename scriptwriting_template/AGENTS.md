@@ -66,6 +66,9 @@ Discover assets progressively through the global index, category index, and
 asset sidecar. Write scripts using production `assets/...` registry paths.
 Always validate before considering a script complete. Generate a storyboard
 when requested; never start a full video render automatically.
+Elements may use either an image `asset` or authored `text`, never both.
+Follow the global conventions for text styles, explicit multiline newlines,
+and deterministic font fallback.
 Scene camera moves use spoken-word indexes and element IDs; validate camera
 sequences before rendering and keep camera examples consistent with the global
 script conventions.

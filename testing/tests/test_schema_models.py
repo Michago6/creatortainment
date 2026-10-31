@@ -64,6 +64,46 @@ def test_project_speed_defaults_to_one_and_accepts_inclusive_bounds() -> None:
         assert ScriptModel.model_validate(candidate).project.speed == speed
 
 
+def test_text_element_requires_exactly_one_source() -> None:
+    base = json.loads((SCRIPTS / "example_script.json").read_text(encoding="utf-8"))
+    element = base["scenes"][0]["elements"][0]
+    element.pop("asset")
+    element["text"] = "Title"
+    element["text_style"] = {"font_size": 48, "alignment": "center"}
+    model = ScriptModel.model_validate(base)
+    assert model.scenes[0].elements[0].text == "Title"
+
+    both = json.loads(json.dumps(base))
+    both["scenes"][0]["elements"][0]["asset"] = "main_character"
+    with pytest.raises(ValidationError):
+        ScriptModel.model_validate(both)
+
+    neither = json.loads(json.dumps(base))
+    neither["scenes"][0]["elements"][0].pop("text")
+    neither["scenes"][0]["elements"][0].pop("text_style")
+    with pytest.raises(ValidationError):
+        ScriptModel.model_validate(neither)
+
+
+@pytest.mark.parametrize(
+    "style",
+    [
+        {"font_size": 0},
+        {"stroke_width": -1},
+        {"background_opacity": 1.1},
+        {"alignment": "justify"},
+    ],
+)
+def test_text_style_rejects_invalid_values(style: dict) -> None:
+    base = json.loads((SCRIPTS / "example_script.json").read_text(encoding="utf-8"))
+    element = base["scenes"][0]["elements"][0]
+    element.pop("asset")
+    element["text"] = "Title"
+    element["text_style"] = style
+    with pytest.raises(ValidationError):
+        ScriptModel.model_validate(base)
+
+
 def test_camera_moves_use_scene_local_spoken_word_ranges_and_element_ids() -> None:
     script = json.loads(
         (SCRIPTS / "example_script.json").read_text(encoding="utf-8")

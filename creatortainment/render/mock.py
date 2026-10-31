@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ..audio.tokenize import spoken_words
 from .visual_assets import first_frame_image, visual_dimensions
+from .text_elements import text_element_image
 
 STORYBOARD_CAPTION_BACKGROUND = (0, 0, 0, 153)
 
@@ -245,13 +246,16 @@ def _place_element(
     canvas_size: tuple[int, int],
     dimension_cache: AssetDimensionCache,
 ) -> None:
-    asset_path = _asset_path(registry, element["asset"], assets_root)
-    if not asset_path.is_file():
-        return
-
     keyframe = _storyboard_keyframe(element)
-    image = first_frame_image(asset_path)
-    native_width, native_height = dimension_cache.dimensions(asset_path)
+    if element.get("text") is not None:
+        image = text_element_image(element)
+        native_width, native_height = image.size
+    else:
+        asset_path = _asset_path(registry, element["asset"], assets_root)
+        if not asset_path.is_file():
+            return
+        image = first_frame_image(asset_path)
+        native_width, native_height = dimension_cache.dimensions(asset_path)
     target_height = keyframe.get("target_height_frac")
     target_width = keyframe.get("target_width_frac")
     if target_height is not None and target_width is not None and keyframe.get("stretch") is True:

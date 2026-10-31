@@ -87,13 +87,37 @@ class KeyframeModel(ScriptModelBase):
         return self
 
 
+class TextStyleModel(ScriptModelBase):
+    font: str | None = None
+    font_size: int = Field(default=48, gt=0)
+    color: str = "#ffffff"
+    stroke_color: str = "#000000"
+    stroke_width: int = Field(default=0, ge=0)
+    alignment: Literal["left", "center", "right"] = "left"
+    background_color: str = "#000000"
+    background_opacity: float = Field(default=0.0, ge=0.0, le=1.0)
+    padding: int = Field(default=0, ge=0)
+
+
 class ElementModel(ScriptModelBase):
     id: str
-    asset: str
+    asset: str | None = None
+    text: str | None = None
+    text_style: TextStyleModel | None = None
     rotation: float = 0.0
     z_index: int = 0
     anchor: Literal["top_left", "center", "bottom_center"]
     keyframes: list[KeyframeModel] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "ElementModel":
+        if (self.asset is None) == (self.text is None):
+            raise ValueError("an element must define exactly one of asset or text")
+        if self.text is not None and not self.text.strip():
+            raise ValueError("text elements must contain non-empty text")
+        if self.asset is not None and self.text_style is not None:
+            raise ValueError("text_style is only valid for text elements")
+        return self
 
 
 class CameraMoveModel(ScriptModelBase):

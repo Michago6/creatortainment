@@ -308,6 +308,49 @@ magnification values must be continuous:
 ]}
 ```
 
+### Text elements
+
+Scene elements may use either an asset or authored text, but never both. Text
+is rendered as a transparent visual element and supports the same keyframes,
+anchors, rotation, opacity, z-order, and camera targeting as image elements.
+Use explicit newlines for multiline text; `target_width_frac` scales the
+complete rendered text box and does not automatically wrap text.
+
+```json
+{
+  "id": "title_card",
+  "text": "THE GPU REVOLUTION\nIN 30 SECONDS",
+  "text_style": {
+    "font": null,
+    "font_size": 72,
+    "color": "#ffffff",
+    "stroke_color": "#000000",
+    "stroke_width": 4,
+    "alignment": "center",
+    "background_color": "#000000",
+    "background_opacity": 0.55,
+    "padding": 18
+  },
+  "rotation": 0,
+  "z_index": 10,
+  "anchor": "center",
+  "keyframes": [
+    {
+      "trigger_word_index": 0,
+      "pos": [540, 300],
+      "target_width_frac": 0.75,
+      "opacity": 1.0,
+      "easing": "ease_out"
+    }
+  ]
+}
+```
+
+`font: null` uses the deterministic built-in fallback: DejaVu Sans Bold,
+Liberation Sans Bold, DejaVu Sans, Liberation Sans Regular, then Pillow's
+default font if none of those files exists. An explicit font path is used when
+that file exists, otherwise the same fallback chain applies.
+
 ## 5.1 Scene order
 
 The `scenes` array is the authoritative playback order.
