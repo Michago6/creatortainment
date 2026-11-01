@@ -404,6 +404,99 @@ def test_cached_manifest_rejects_changed_narration(tmp_path: Path) -> None:
         refresh_cached_manifest_scenes(script, manifest, tmp_path)
 
 
+def test_cached_manifest_reuses_audio_boundaries_without_decoding(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    script = _cached_manifest_script()
+    audio_path = tmp_path / "narration.wav"
+    _write_cached_audio(audio_path)
+    manifest = _cached_manifest(script, audio_path)
+    monkeypatch.setattr(
+        "creatortainment.audio.manifest._segment_audio_duration",
+        lambda _path, _fallback: 2.0,
+    )
+    decoded = 0
+    original_decode = __import__(
+        "creatortainment.audio.alignment",
+        fromlist=["_decoded_audio_mono"],
+    )._decoded_audio_mono
+
+    def tracked_decode(*args, **kwargs):
+        nonlocal decoded
+        decoded += 1
+        return original_decode(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "creatortainment.audio.alignment._decoded_audio_mono",
+        tracked_decode,
+    )
+    statuses: list[str] = []
+    refresh_cached_manifest_scenes(
+        script,
+        manifest,
+        tmp_path,
+        boundary_status=statuses.append,
+    )
+    expected = copy.deepcopy(manifest["scenes"])
+    assert decoded == 1
+    assert statuses == ["Calculating narration scene boundaries from audio."]
+    assert "scene_boundary_cache" in manifest
+
+    monkeypatch.setattr(
+        "creatortainment.audio.alignment._decoded_audio_mono",
+        lambda *_args, **_kwargs: pytest.fail("cached boundary decoded audio"),
+    )
+    statuses.clear()
+    refresh_cached_manifest_scenes(
+        script,
+        manifest,
+        tmp_path,
+        boundary_status=statuses.append,
+    )
+    assert manifest["scenes"] == expected
+    assert statuses == ["Reusing cached narration scene boundaries."]
+
+
+@pytest.mark.parametrize("invalidate", ["audio", "alignment", "algorithm"])
+def test_cached_manifest_boundary_cache_invalidates(
+    tmp_path: Path,
+    monkeypatch,
+    invalidate: str,
+) -> None:
+    script = _cached_manifest_script()
+    audio_path = tmp_path / "narration.wav"
+    _write_cached_audio(audio_path)
+    manifest = _cached_manifest(script, audio_path)
+    monkeypatch.setattr(
+        "creatortainment.audio.manifest._segment_audio_duration",
+        lambda _path, _fallback: 2.0,
+    )
+    refresh_cached_manifest_scenes(script, manifest, tmp_path)
+    if invalidate == "audio":
+        audio_path.write_bytes(audio_path.read_bytes() + b"\0")
+    elif invalidate == "alignment":
+        manifest["word_timestamps"][0]["start"] = 0.01
+    else:
+        monkeypatch.setattr(
+            "creatortainment.audio.manifest.AUDIO_BOUNDARY_ALGORITHM_VERSION",
+            2,
+        )
+    decoded = 0
+
+    def tracked_decode(*args, **kwargs):
+        nonlocal decoded
+        decoded += 1
+        return np.zeros(44100 * 2, dtype=np.float32)
+
+    monkeypatch.setattr(
+        "creatortainment.audio.alignment._decoded_audio_mono",
+        tracked_decode,
+    )
+    refresh_cached_manifest_scenes(script, manifest, tmp_path)
+    assert decoded == 1
+
+
 def test_old_tagged_manifest_is_rejected_for_explicit_refresh(tmp_path: Path) -> None:
     script = _cached_manifest_script()
     script["scenes"][0]["narration_text"] = "[whispers] Alpha beta."

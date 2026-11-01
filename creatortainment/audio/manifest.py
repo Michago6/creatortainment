@@ -6,9 +6,9 @@ import hashlib
 import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from .alignment import align_scenes
+from .alignment import AUDIO_BOUNDARY_ALGORITHM_VERSION, align_scenes
 from ..schema.models import NarrationSegment
 from .elevenlabs_client import (
     NarrationClient,
@@ -218,6 +218,7 @@ def refresh_cached_manifest_scenes(
     project_dir: Path,
     *,
     validate_audio_duration: bool = True,
+    boundary_status: Callable[[str], None] | None = None,
 ) -> bool:
     """Refresh scene segmentation while reusing validated narration data."""
     expected_hash = narration_hash(script)
@@ -227,6 +228,8 @@ def refresh_cached_manifest_scenes(
             "Run align before rendering."
         )
     if _has_segment_syntax(script):
+        if boundary_status is not None:
+            boundary_status("Skipping audio-boundary cache for multi-voice narration.")
         return _refresh_cached_segment_manifest(script, manifest, project_dir)
 
     text, _ = narration_text_and_pauses(script["scenes"])
@@ -274,6 +277,27 @@ def refresh_cached_manifest_scenes(
         raise FileNotFoundError(
             f"Cached narration audio file does not exist: {audio_path}"
         )
+    boundary_cache_key = _boundary_cache_key(
+        script,
+        timestamps,
+        audio_path,
+    )
+    cached_boundaries = manifest.get("scene_boundary_cache")
+    if (
+        validate_audio_duration
+        and isinstance(cached_boundaries, dict)
+        and cached_boundaries.get("key") == boundary_cache_key
+        and isinstance(cached_boundaries.get("scenes"), list)
+    ):
+        if boundary_status is not None:
+            boundary_status("Reusing cached narration scene boundaries.")
+        aligned_scenes = cached_boundaries["scenes"]
+        changed = manifest.get("scenes") != aligned_scenes
+        if changed:
+            manifest["scenes"] = aligned_scenes
+        return changed
+    if boundary_status is not None:
+        boundary_status("Calculating narration scene boundaries from audio.")
     audio_duration: float | None = None
     if validate_audio_duration:
         audio_duration = _segment_audio_duration(audio_path, previous_end)
@@ -289,9 +313,48 @@ def refresh_cached_manifest_scenes(
         )
     ]
     changed = manifest.get("scenes") != aligned_scenes
+    if validate_audio_duration:
+        boundary_cache = {
+            "key": boundary_cache_key,
+            "algorithm_version": AUDIO_BOUNDARY_ALGORITHM_VERSION,
+            "scenes": aligned_scenes,
+        }
+        cache_changed = manifest.get("scene_boundary_cache") != boundary_cache
+        manifest["scene_boundary_cache"] = boundary_cache
+    else:
+        cache_changed = False
     if changed:
         manifest["scenes"] = aligned_scenes
-    return changed
+    return changed or cache_changed
+
+
+def _boundary_cache_key(
+    script: dict[str, Any],
+    timestamps: list[dict[str, Any]],
+    audio_path: Path,
+) -> str:
+    """Build a cheap cache key from existing alignment and file metadata."""
+    stat = audio_path.stat()
+    scene_layout = [
+        {
+            "id": scene.get("id"),
+            "narration_text": scene.get("narration_text"),
+        }
+        for scene in script["scenes"]
+    ]
+    value = {
+        "algorithm_version": AUDIO_BOUNDARY_ALGORITHM_VERSION,
+        "audio": {
+            "path": str(audio_path.resolve()),
+            "size": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+        },
+        "timestamps": timestamps,
+        "scene_layout": scene_layout,
+    }
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def _refresh_cached_segment_manifest(

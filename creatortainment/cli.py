@@ -462,7 +462,13 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
         )
     manifest = read_manifest(manifest_path)
     try:
-        if refresh_cached_manifest_scenes(script, manifest, project_dir):
+        print("Checking cached narration scene boundaries...", flush=True)
+        if refresh_cached_manifest_scenes(
+            script,
+            manifest,
+            project_dir,
+            boundary_status=lambda message: print(message, flush=True),
+        ):
             write_manifest(manifest_path, manifest)
             if manifest_path != project_dir / "build_manifest.json":
                 write_manifest(project_dir / "build_manifest.json", manifest)

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import sys
 from moviepy import (
     AudioFileClip,
     AudioClip,
@@ -17,6 +18,7 @@ from moviepy import (
     concatenate_videoclips,
     vfx,
 )
+from proglog import default_bar_logger
 from PIL import Image, ImageFont
 
 from .captions import (
@@ -967,7 +969,29 @@ def build_full_video_clip(
             run_for_scene[scene_index] = (run_start, origin, end)
 
     scene_units = []
-    for index, (scene, scene_manifest) in enumerate(zip(scenes, scene_manifests)):
+    construction_logger = default_bar_logger(
+        "bar",
+        bars={
+            "scene": {
+                "title": "MoviePy - Building scenes",
+                "index": -1,
+                "total": len(scenes),
+                "message": None,
+                "indent": 0,
+            }
+        },
+    )
+    sys.stdout.write("Building scene: ")
+    sys.stdout.flush()
+    scene_indices = construction_logger.iter_bar(
+        scene=range(len(scenes)),
+    )
+    for index in scene_indices:
+        scene = scenes[index]
+        scene_manifest = scene_manifests[index]
+        scene_id = scene.get("id", f"scene_{index + 1}")
+        sys.stdout.write(f"\rBuilding scene: {scene_id:<40}")
+        sys.stdout.flush()
         timeline_info = run_for_scene[index]
         run_start, run_origin, _run_end = timeline_info
         timeline = timelines.get(run_start)
@@ -1022,6 +1046,8 @@ def build_full_video_clip(
         unit_parts.append(narrated_clip)
         unit = concatenate_videoclips(unit_parts, method="chain")
         scene_units.append(unit)
+    sys.stdout.write("\n")
+    sys.stdout.flush()
 
     positioned = []
     audio_layers = []
