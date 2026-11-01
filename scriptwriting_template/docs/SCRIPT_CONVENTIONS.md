@@ -269,6 +269,18 @@ The pipeline computes global offsets from the local scene indices.
 
 A `trigger_word_index` must be less than the local word count of its scene's narration.
 
+## 4.5 Scene audio boundaries
+
+For legacy single-voice narration, internal scene boundaries are normally based
+on the next scene's first aligned word. When the decoded narration contains a
+trailing consonant or other acoustic tail beyond the final word timestamp, the
+renderer searches the bounded interval for a quiet gap and moves the shared
+boundary to that gap. Both adjacent scenes use the same resolved boundary, so
+audio remains contiguous without duplicating or dropping samples. If no
+reliable gap can be established, the aligned timestamp is retained rather than
+inventing fixed padding. Multi-voice segment timing continues to use its
+segment boundaries.
+
 ---
 
 # 5. Scene structure

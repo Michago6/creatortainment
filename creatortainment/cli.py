@@ -558,6 +558,7 @@ def repair_cached_manifest_timing(
             script["scenes"],
             timestamps,
             narration_duration_sec=audio_duration,
+            audio_path=audio_path,
         )
     ]
     write_manifest(manifest_path, manifest)

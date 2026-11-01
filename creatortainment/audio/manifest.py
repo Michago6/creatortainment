@@ -285,6 +285,7 @@ def refresh_cached_manifest_scenes(
             script["scenes"],
             timestamps,
             narration_duration_sec=audio_duration,
+            audio_path=audio_path if validate_audio_duration else None,
         )
     ]
     changed = manifest.get("scenes") != aligned_scenes
@@ -520,6 +521,7 @@ def build_manifest(
         script["scenes"],
         timestamps,
         narration_duration_sec=audio_duration,
+        audio_path=audio_path,
     )
     manifest = {
         "narration_hash": current_hash,

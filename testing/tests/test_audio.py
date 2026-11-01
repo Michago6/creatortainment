@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from moviepy import AudioClip, AudioFileClip, CompositeAudioClip
 
-from creatortainment.audio.alignment import align_scenes
+from creatortainment.audio.alignment import align_scenes, resolve_audio_boundary
 from creatortainment.audio.elevenlabs_client import NarrationResult, WordTimestamp
 from creatortainment.audio.manifest import (
     build_manifest,
@@ -227,6 +227,90 @@ def _write_cached_audio(path: Path) -> None:
         audio.close()
 
 
+def _write_boundary_audio(path: Path, *, continuous: bool = False) -> None:
+    sample_rate = 44100
+    duration = 1.0
+
+    def frame(t: float | np.ndarray) -> np.ndarray:
+        times = np.asarray(t, dtype=float)
+        if continuous:
+            values = 0.1 * np.sin(2 * np.pi * 220 * times)
+        else:
+            values = np.where(
+                times < 0.55,
+                0.1 * np.sin(2 * np.pi * 220 * times),
+                np.where(
+                    times < 0.62,
+                    0.08 * np.sin(2 * np.pi * 6000 * times),
+                    np.where(
+                        times < 0.68,
+                        0.0,
+                        0.1 * np.sin(2 * np.pi * 220 * times),
+                    ),
+                ),
+            )
+        if times.ndim == 0:
+            return np.array([float(values), float(values)])
+        return np.column_stack((values, values))
+
+    audio = AudioClip(frame, duration=duration, fps=sample_rate)
+    try:
+        audio.write_audiofile(str(path), fps=sample_rate, codec="pcm_s16le", logger=None)
+    finally:
+        audio.close()
+
+
+def test_audio_aware_boundary_preserves_trailing_fricative_and_contiguous_slices(
+    tmp_path: Path,
+) -> None:
+    audio_path = tmp_path / "boundary.wav"
+    _write_boundary_audio(audio_path)
+    boundary = resolve_audio_boundary(
+        audio_path,
+        final_word_end=0.55,
+        next_word_start=0.64,
+    )
+    assert 0.615 <= boundary < 0.64
+
+    aligned = align_scenes(
+        [
+            {"id": "one", "narration_text": "Alpha."},
+            {"id": "two", "narration_text": "Beta."},
+        ],
+        [
+            {"word": "Alpha.", "start": 0.0, "end": 0.55},
+            {"word": "Beta.", "start": 0.64, "end": 0.9},
+        ],
+        audio_path=audio_path,
+    )
+    assert aligned[0].end_time_sec == pytest.approx(aligned[1].start_time_sec)
+    assert aligned[0].end_time_sec == pytest.approx(boundary)
+
+    source = AudioFileClip(str(audio_path))
+    first = source.subclipped(0.0, aligned[0].end_time_sec)
+    second = source.subclipped(aligned[1].start_time_sec, 0.9)
+    try:
+        assert float(np.abs(first.get_frame(boundary - 0.01)[0])) > 0.01
+        assert float(np.abs(second.get_frame(0.68 - boundary)[0])) > 0.01
+        assert first.duration + second.duration == pytest.approx(0.9)
+    finally:
+        second.close()
+        first.close()
+        source.close()
+
+
+def test_audio_aware_boundary_falls_back_without_quiet_interval(
+    tmp_path: Path,
+) -> None:
+    audio_path = tmp_path / "continuous.wav"
+    _write_boundary_audio(audio_path, continuous=True)
+    assert resolve_audio_boundary(
+        audio_path,
+        final_word_end=0.55,
+        next_word_start=0.64,
+    ) == pytest.approx(0.64)
+
+
 def _cached_manifest(script: dict, audio_path: Path) -> dict:
     timestamps = [
         {"word": "Alpha", "start": 0.0, "end": 0.3},
@@ -364,6 +448,10 @@ def test_cached_audio_duration_uses_bounded_alignment_tolerance(
     monkeypatch.setattr(
         "creatortainment.audio.manifest._segment_audio_duration",
         lambda _path, _fallback: FakeAudio.duration,
+    )
+    monkeypatch.setattr(
+        "creatortainment.audio.alignment._decoded_audio_mono",
+        lambda _path, _sample_rate: np.zeros(44100 * 2, dtype=np.float32),
     )
 
     if should_fail:
