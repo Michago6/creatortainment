@@ -13,6 +13,7 @@ from PIL import Image
 import creatortainment.render.mock as storyboard_renderer
 from creatortainment.render.mock import render_storyboard
 from creatortainment.render.moviepy_scene import build_static_scene_clip
+import creatortainment.render.visual_assets as visual_assets
 from creatortainment.render.visual_assets import first_frame_image, load_visual_clip
 
 
@@ -89,6 +90,63 @@ def test_short_mp4_loops_to_exact_duration_and_has_no_audio() -> None:
         assert clip.get_frame(2.4).shape[:2] == (470, 854)
     finally:
         clip.close()
+
+
+def test_vfr_source_uses_presentation_timestamps() -> None:
+    path = PRODUCTION_ASSETS / "backgrounds/tierlist/mandelbrot_set_tierlist.mp4"
+    timestamps = visual_assets._vfr_frame_timestamps(path)
+    assert timestamps is not None
+    assert len(timestamps) > 40
+    assert any(
+        later - earlier > 0.5
+        for earlier, later in zip(timestamps, timestamps[1:])
+    )
+
+    source = VideoFileClip(str(path), audio=False)
+    requested_source_times: list[float] = []
+    original = source.frame_function
+
+    def tracked_frame(time: float) -> np.ndarray:
+        requested_source_times.append(time)
+        return original(time)
+
+    source.frame_function = tracked_frame
+    clip = visual_assets._make_source_times_safe(source, path)
+    try:
+        requested_time = 1.0
+        expected_frame = visual_assets.bisect_right(timestamps, requested_time) - 1
+        clip.get_frame(requested_time)
+        assert requested_source_times[-1] == expected_frame / source.fps
+    finally:
+        clip.close()
+
+
+def test_cfr_source_keeps_constant_fps_frame_lookup(monkeypatch) -> None:
+    class Reader:
+        n_frames = 10
+
+        @staticmethod
+        def get_frame_number(time: float) -> int:
+            return int(time * 10)
+
+    class Clip:
+        fps = 10.0
+        reader = Reader()
+
+        def __init__(self) -> None:
+            self.frame_function = self._frame
+            self.requested: list[float] = []
+
+        def _frame(self, time: float) -> np.ndarray:
+            self.requested.append(time)
+            return np.zeros((1, 1, 3), dtype=np.uint8)
+
+    source = Clip()
+    monkeypatch.setattr(visual_assets, "_vfr_frame_timestamps", lambda _path: None)
+    monkeypatch.setattr(visual_assets, "_decoded_frame_count", lambda _path, fallback: fallback)
+    clip = visual_assets._make_source_times_safe(source, Path("cfr.mp4"))
+    clip.frame_function(0.35)
+    assert source.requested == [0.3]
 
 
 def test_short_animated_assets_do_not_read_past_source_end() -> None:

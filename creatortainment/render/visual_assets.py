@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -45,15 +46,79 @@ def _decoded_frame_count(path: Path, fallback: int) -> int:
     return count if count > 0 else fallback
 
 
+def _vfr_frame_timestamps(path: Path) -> list[float] | None:
+    """Return decoded frame PTS values when stream metadata indicates VFR."""
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe is None:
+        return None
+    metadata = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=r_frame_rate,avg_frame_rate",
+            "-of",
+            "json",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    streams = json.loads(metadata.stdout).get("streams", [])
+    if not streams:
+        return None
+    stream = streams[0]
+    if stream.get("r_frame_rate") == stream.get("avg_frame_rate"):
+        return None
+
+    frames = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_frames",
+            "-show_entries",
+            "frame=best_effort_timestamp_time",
+            "-of",
+            "json",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    timestamps = [
+        float(frame["best_effort_timestamp_time"])
+        for frame in json.loads(frames.stdout).get("frames", [])
+        if frame.get("best_effort_timestamp_time") is not None
+    ]
+    return timestamps or None
+
+
 def _make_source_times_safe(clip: VideoFileClip, path: Path) -> VideoFileClip:
-    """Map decoder requests to an available source frame."""
+    """Map decoder requests to available source frames without overruns."""
     reader = clip.reader
     source_fps = float(clip.fps)
-    source_frame_count = _decoded_frame_count(path, int(reader.n_frames))
+    timestamps = _vfr_frame_timestamps(path)
+    source_frame_count = (
+        len(timestamps)
+        if timestamps is not None
+        else _decoded_frame_count(path, int(reader.n_frames))
+    )
     original_frame_function = clip.frame_function
 
     def safe_frame_function(time: float) -> np.ndarray:
-        frame_number = reader.get_frame_number(max(0.0, float(time)))
+        requested_time = max(0.0, float(time))
+        if timestamps is None:
+            frame_number = reader.get_frame_number(requested_time)
+        else:
+            frame_number = bisect_right(timestamps, requested_time) - 1
         frame_number = min(max(frame_number, 0), source_frame_count - 1)
         return original_frame_function(frame_number / source_fps)
 
