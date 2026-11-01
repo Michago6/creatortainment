@@ -47,34 +47,10 @@ def _decoded_frame_count(path: Path, fallback: int) -> int:
 
 
 def _vfr_frame_timestamps(path: Path) -> list[float] | None:
-    """Return decoded frame PTS values when stream metadata indicates VFR."""
+    """Return decoded frame PTS values when the decoded cadence is irregular."""
     ffprobe = shutil.which("ffprobe")
     if ffprobe is None:
         return None
-    metadata = subprocess.run(
-        [
-            ffprobe,
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=r_frame_rate,avg_frame_rate",
-            "-of",
-            "json",
-            str(path),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    streams = json.loads(metadata.stdout).get("streams", [])
-    if not streams:
-        return None
-    stream = streams[0]
-    if stream.get("r_frame_rate") == stream.get("avg_frame_rate"):
-        return None
-
     frames = subprocess.run(
         [
             ffprobe,
@@ -98,29 +74,109 @@ def _vfr_frame_timestamps(path: Path) -> list[float] | None:
         for frame in json.loads(frames.stdout).get("frames", [])
         if frame.get("best_effort_timestamp_time") is not None
     ]
-    return timestamps or None
+    if len(timestamps) < 3:
+        return None
+    intervals = np.diff(timestamps)
+    median_interval = float(np.median(intervals))
+    tolerance = max(1e-4, median_interval * 1e-3)
+    return timestamps if float(np.max(intervals) - np.min(intervals)) > tolerance else None
 
 
 def _make_source_times_safe(clip: VideoFileClip, path: Path) -> VideoFileClip:
     """Map decoder requests to available source frames without overruns."""
     reader = clip.reader
-    source_fps = float(clip.fps)
     timestamps = _vfr_frame_timestamps(path)
     source_frame_count = (
         len(timestamps)
         if timestamps is not None
         else _decoded_frame_count(path, int(reader.n_frames))
     )
-    original_frame_function = clip.frame_function
+    if timestamps is None:
+        original_frame_function = clip.frame_function
 
-    def safe_frame_function(time: float) -> np.ndarray:
-        requested_time = max(0.0, float(time))
-        if timestamps is None:
-            frame_number = reader.get_frame_number(requested_time)
-        else:
+        def safe_frame_function(time: float) -> np.ndarray:
+            frame_number = reader.get_frame_number(max(0.0, float(time)))
+            frame_number = min(max(frame_number, 0), source_frame_count - 1)
+            return original_frame_function(frame_number / float(clip.fps))
+
+    else:
+        # MoviePy's raw reader may resample irregular streams to its nominal
+        # FPS. Decode VFR frames ourselves with vsync disabled, then address
+        # that ordered decoded stream by the PTS-selected frame index.
+        ffmpeg = shutil.which("ffmpeg")
+        if ffmpeg is None:
+            raise RuntimeError("FFmpeg is required to decode VFR video assets.")
+        frame_bytes = reader.depth * reader.size[0] * reader.size[1]
+        reader.close()
+        decoder: subprocess.Popen[bytes] | None = None
+        decoded_index = -1
+        decoded_frame: np.ndarray | None = None
+
+        def open_decoder() -> None:
+            nonlocal decoder, decoded_index, decoded_frame
+            if decoder is not None:
+                decoder.kill()
+                decoder.wait()
+            decoder = subprocess.Popen(
+                [
+                    ffmpeg,
+                    "-v",
+                    "error",
+                    "-i",
+                    str(path),
+                    "-vsync",
+                    "0",
+                    "-f",
+                    "image2pipe",
+                    "-vf",
+                    f"scale={reader.size[0]}:{reader.size[1]}",
+                    "-pix_fmt",
+                    reader.pixel_format,
+                    "-vcodec",
+                    "rawvideo",
+                    "-",
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            decoded_index = -1
+            decoded_frame = None
+
+        def read_decoded_frame() -> np.ndarray:
+            assert decoder is not None and decoder.stdout is not None
+            data = decoder.stdout.read(frame_bytes)
+            if len(data) != frame_bytes:
+                raise IOError(f"Unable to decode VFR frame from {path}.")
+            frame = np.frombuffer(data, dtype=np.uint8)
+            frame.shape = (reader.size[1], reader.size[0], reader.depth)
+            return frame
+
+        open_decoder()
+
+        def safe_frame_function(time: float) -> np.ndarray:
+            nonlocal decoded_index, decoded_frame
+            requested_time = max(0.0, float(time))
             frame_number = bisect_right(timestamps, requested_time) - 1
-        frame_number = min(max(frame_number, 0), source_frame_count - 1)
-        return original_frame_function(frame_number / source_fps)
+            frame_number = min(max(frame_number, 0), source_frame_count - 1)
+            if frame_number < decoded_index:
+                open_decoder()
+            if frame_number > decoded_index:
+                while decoded_index < frame_number:
+                    decoded_frame = read_decoded_frame()
+                    decoded_index += 1
+            assert decoded_frame is not None
+            return decoded_frame
+
+        original_close = clip.close
+
+        def close() -> None:
+            if decoder is not None:
+                decoder.kill()
+                decoder.wait()
+            original_close()
+
+        clip.close = close
 
     clip.frame_function = safe_frame_function
     return clip

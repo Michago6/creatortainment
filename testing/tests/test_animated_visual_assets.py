@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import warnings
 from pathlib import Path
 
@@ -43,6 +45,44 @@ def _scene_script(asset_path: str, *, element: bool = False) -> dict:
     else:
         scene["bg"] = "test_visual"
     return script
+
+
+def _vfr_reference_frame(path: Path, index: int, size: tuple[int, int]) -> np.ndarray:
+    ffmpeg = shutil.which("ffmpeg")
+    assert ffmpeg is not None
+    process = subprocess.Popen(
+        [
+            ffmpeg,
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-vsync",
+            "0",
+            "-f",
+            "image2pipe",
+            "-vf",
+            f"scale={size[0]}:{size[1]}",
+            "-pix_fmt",
+            "rgb24",
+            "-vcodec",
+            "rawvideo",
+            "-",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        frame_size = size[0] * size[1] * 3
+        data = process.stdout.read(frame_size * (index + 1))
+        assert len(data) >= frame_size * (index + 1)
+        frame = np.frombuffer(
+            data[-frame_size:], dtype=np.uint8
+        ).reshape((size[1], size[0], 3))
+        return frame
+    finally:
+        process.kill()
+        process.wait()
 
 
 def test_short_gif_loops_to_exact_duration() -> None:
@@ -102,23 +142,47 @@ def test_vfr_source_uses_presentation_timestamps() -> None:
         for earlier, later in zip(timestamps, timestamps[1:])
     )
 
-    source = VideoFileClip(str(path), audio=False)
-    requested_source_times: list[float] = []
-    original = source.frame_function
-
-    def tracked_frame(time: float) -> np.ndarray:
-        requested_source_times.append(time)
-        return original(time)
-
-    source.frame_function = tracked_frame
-    clip = visual_assets._make_source_times_safe(source, path)
+    clip = visual_assets._make_source_times_safe(
+        VideoFileClip(str(path), audio=False), path
+    )
     try:
         requested_time = 1.0
         expected_frame = visual_assets.bisect_right(timestamps, requested_time) - 1
-        clip.get_frame(requested_time)
-        assert requested_source_times[-1] == expected_frame / source.fps
+        expected = _vfr_reference_frame(path, expected_frame, clip.size)
+        assert np.array_equal(clip.get_frame(requested_time), expected)
     finally:
         clip.close()
+
+
+def test_vfr_assets_use_exact_decoded_frames_at_early_middle_and_late_times() -> None:
+    cases = (
+        "mandelbrot_set_tierlist.mp4",
+        "multibrot_tierlist.mp4",
+        "newton_tierlist.mp4",
+    )
+    for filename in cases:
+        path = next(PRODUCTION_ASSETS.rglob(filename))
+        timestamps = visual_assets._vfr_frame_timestamps(path)
+        assert timestamps is not None
+        source = VideoFileClip(str(path), audio=False)
+        clip = visual_assets._make_source_times_safe(source, path)
+        try:
+            for requested_time in (
+                timestamps[1] / 2,
+                timestamps[len(timestamps) // 2],
+                timestamps[-1],
+            ):
+                index = max(
+                    0,
+                    min(
+                        len(timestamps) - 1,
+                        visual_assets.bisect_right(timestamps, requested_time) - 1,
+                    ),
+                )
+                expected = _vfr_reference_frame(path, index, clip.size)
+                assert np.array_equal(clip.get_frame(requested_time), expected)
+        finally:
+            clip.close()
 
 
 def test_cfr_source_keeps_constant_fps_frame_lookup(monkeypatch) -> None:

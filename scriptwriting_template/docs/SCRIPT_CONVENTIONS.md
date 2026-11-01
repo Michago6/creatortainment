@@ -836,8 +836,9 @@ Video assets are time-based media rather than static images. The renderer
 should preserve their temporal playback rather than treating them as a
 single still frame.
 
-The renderer preserves presentation timestamps for variable-frame-rate (VFR)
-videos and uses the efficient constant-frame-rate path for CFR videos. Keep
+The renderer detects variable-frame-rate (VFR) media from decoded timestamp
+regularity, preserves its presentation timestamps with sequential frame
+decoding, and uses the efficient constant-frame-rate path for CFR videos. Keep
 the source timestamps valid when exporting VFR assets; malformed or missing
 timestamps may require re-encoding before use.
 
