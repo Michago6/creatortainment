@@ -981,8 +981,6 @@ def build_full_video_clip(
             }
         },
     )
-    sys.stdout.write("Building scene: ")
-    sys.stdout.flush()
     scene_indices = construction_logger.iter_bar(
         scene=range(len(scenes)),
     )
@@ -990,7 +988,9 @@ def build_full_video_clip(
         scene = scenes[index]
         scene_manifest = scene_manifests[index]
         scene_id = scene.get("id", f"scene_{index + 1}")
-        sys.stdout.write(f"\rBuilding scene: {scene_id:<40}")
+        # Keep the identifier out of the tqdm line so it cannot reduce the
+        # meter width. The terminal title is a separate, zero-width status.
+        sys.stdout.write(f"\033]0;Building scene: {scene_id}\a")
         sys.stdout.flush()
         timeline_info = run_for_scene[index]
         run_start, run_origin, _run_end = timeline_info
@@ -1046,6 +1046,7 @@ def build_full_video_clip(
         unit_parts.append(narrated_clip)
         unit = concatenate_videoclips(unit_parts, method="chain")
         scene_units.append(unit)
+    sys.stdout.write("\033]0;Building scenes complete\a")
     sys.stdout.write("\n")
     sys.stdout.flush()
 
