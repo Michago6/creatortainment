@@ -33,7 +33,7 @@ context:
 
 ```bash
 cd scriptwriting
-copilot --agent scriptwriter
+copilot
 ```
 
 Changing directories provides workflow context, not filesystem security. The

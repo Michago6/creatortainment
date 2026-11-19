@@ -61,7 +61,7 @@ For production narration, use the `eleven_v3` TTS model. The
 `eleven_flash_v2_5` model is reserved for testing unless the user explicitly
 requests otherwise.
 
-Use the lifecycle `scripts/drafts/ → scripts/ready/ → scripts/archive/`.
+Use the lifecycle `scripts/drafts/ → scripts/archive/`.
 Discover assets progressively through the global index, category index, and
 asset sidecar. Write scripts using production `assets/...` registry paths.
 Always validate before considering a script complete. Generate a storyboard

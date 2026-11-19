@@ -5,8 +5,8 @@ script authors. It is intentionally gitignored so writing context, curated
 asset copies, sidecars, storyboard drafts, and learned preferences do not
 become implementation repository history.
 
-The workspace contains authoring docs, `scripts/drafts/`, `scripts/ready/`,
-`scripts/archive/`, curated assets, and `agent_knowledge/`. The canonical
+The workspace contains authoring docs, `scripts/drafts/`, `scripts/archive/`,
+curated assets, and `agent_knowledge/`. The canonical
 production asset root is `scriptwriting/assets/`; scripts retain the
 project-relative `assets/...` registry namespace. Curated asset metadata and
 indexes support discovery and

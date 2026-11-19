@@ -42,8 +42,8 @@ paths use the `assets/...` namespace and resolve to the canonical
    .venv/bin/python -m creatortainment storyboard scriptwriting/scripts/drafts/<script>.json
    ```
 
-6. Fix validation or storyboard issues, validate again, and move the finished
-   script to `scripts/ready/`.
+6. Fix validation or storyboard issues and validate again. Keep the script in
+   `scripts/drafts/` until it is complete.
 7. Move completed or superseded scripts to `scripts/archive/` when appropriate.
 
 Do not perform a full video render automatically. Rendering remains an

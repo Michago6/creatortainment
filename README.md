@@ -1,54 +1,320 @@
 # Creatortainment
 
 Creatortainment turns an authored JSON script into a finished short-form
-video. You provide the scenes, narration, backgrounds, reusable characters,
-captions, music, sound effects, and timing; Creatortainment assembles the
-storyboard, narration alignment, animated visuals, and final MP4.
+video. It combines scenes, narration, reusable visual and audio assets,
+captions, camera motion, transitions, music, and sound effects into a
+MoviePy/FFmpeg rendering pipeline.
 
-The project is designed for an enjoyable **iterate → preview → render** loop:
-make a small change, check it quickly, and only spend time on a full render
-when everything looks right. ☕🎬
+The intended workflow is:
 
-## CLI architecture
+```text
+author or describe a script
+        ↓
+validate the script and assets
+        ↓
+generate a storyboard
+        ↓
+generate or reuse aligned narration
+        ↓
+render a preview
+        ↓
+iterate
+        ↓
+render the final video
+```
 
-The complete command flow, including validation, asset generation, narration
-alignment, caching, storyboard creation, camera animation, rendering, and
-audio mixing, is available as an SVG diagram:
+---
+
+## Choose a workflow
+
+### Recommended: use an AI coding agent
+
+For the easiest experience, use an agent such as GitHub Copilot, Claude Code,
+or Gemini CLI in the local `scriptwriting/` workspace. The workspace gives
+the agent the conventions, asset indexes, script lifecycle, and reusable
+`agent_knowledge/` needed to create and improve scripts.
+
+An agent can:
+
+- read and maintain preferences in `agent_knowledge/`
+- organize assets added to `scriptwriting/assets/`
+- create asset sidecars and descriptions
+- build scripts in `scriptwriting/scripts/drafts/`
+- move completed or superseded scripts to `archive/`
+- run validation and storyboard commands
+- prepare narration alignment and previews
+- explain missing assets and next steps
+- preserve confirmed user preferences across future sessions
+
+The agent should not make a full paid render or narration/API call unless you
+explicitly request it. Keep provider credentials local and review any
+generation step that spends credits.
+
+### Direct: use the CLI
+
+Use the CLI directly when you prefer explicit control, are automating scripts,
+or are developing Creatortainment itself. Every agent workflow ultimately uses
+the same local commands documented below.
+
+---
+
+## Agent-assisted quick start
+
+### 1. Create the environment
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[full]'
+cp .env.example .env
+```
+
+Add provider credentials to `.env` only when you need them:
+
+```text
+ELEVENLABS_API_KEY=...
+FAL_KEY=...
+```
+
+Never commit `.env` or API key files.
+
+For ElevenLabs voice validation, the API key needs the `voices_read`
+permission. Community/shared voices may need to be added to **My Voices**
+before being able to be used.
+
+### 2. Create the local scriptwriting workspace
+
+The public template is tracked in `scriptwriting_template/`. The working
+workspace is `scriptwriting/`, and it is gitignored.
+
+```bash
+cp -a scriptwriting_template/. scriptwriting/
+```
+
+Detailed setup is in
+[`scriptwriting_template/docs/AGENT_SETUP.md`](scriptwriting_template/docs/AGENT_SETUP.md)
+and [`docs/SCRIPTWRITING_WORKSPACE.md`](docs/SCRIPTWRITING_WORKSPACE.md).
+
+### 3. Discover and organize reusable assets
+
+Place reusable images, videos, music, and sound effects under
+`scriptwriting/assets/`. Organize them by category manually or let an AI agent do it, for example:
+
+```text
+scriptwriting/assets/
+├── backgrounds/
+├── images/
+├── audio/
+│   ├── music/
+│   └── sfx/
+└── fonts/
+```
+
+To create or refresh the local curated inventory, sidecars, and asset indexes:
+
+```bash
+.venv/bin/python tools/bootstrap_scriptwriting_assets.py --inspect-frames
+```
+
+Assets are normally shared across projects. Scripts reference them through the
+`asset_registry` using stable keys and `assets/...` paths, not absolute local
+paths.
+
+### 4. Start an agent in the workspace
+
+For GitHub Copilot CLI:
+
+```bash
+cd scriptwriting
+copilot
+```
+
+For another coding agent, open a session in `scriptwriting/` and tell it to
+read `AGENTS.md`, `ASSET_INDEX.md`, `docs/`, and `agent_knowledge/INDEX.md`.
+The workspace can work with agents that support repository instructions and
+local files.
+
+Example prompts:
+
+```text
+Create a 30-second short-form script about retro video games.
+Use the assets in the asset library and my saved writing preferences.
+Validate the draft when it is ready.
+```
+
+```text
+Organize these newly added assets, describe what they contain,
+update the asset index, and create an asset sidecar for each one.
+```
+
+```text
+Create a storyboard for the draft and point out missing assets.
+Do not generate narration or render the full video.
+```
+
+### 5. Reuse learned preferences
+
+At the start of a script project, the scriptwriting agent reads
+`agent_knowledge/INDEX.md`, then only the knowledge files relevant to the
+request.
+
+Reusable preferences may be stored in `agent_knowledge/` for:
+
+- writing style
+- preferred captions
+- common shot and camera patterns
+- editing and transition preferences
+- asset naming conventions
+- voice and narration choices
+- confirmed workflow lessons
+
+Knowledge is supplementary. Current user instructions and the schema/documented
+conventions always take precedence. Only confirmed, reusable preferences should
+be written there.
+
+---
+
+## Direct CLI quick start
+
+The archived Pac-Man script is a useful public example:
+
+```text
+scriptwriting_template/scripts/archive/pac_man_ghosts_were_never_smart.json
+```
+
+After copying `scriptwriting_template/` into `scriptwriting/`, run the public
+example directly from the template archive:
+
+```bash
+.venv/bin/python -m creatortainment validate \
+  scriptwriting_template/scripts/archive/pac_man_ghosts_were_never_smart.json
+```
+
+The normal script lifecycle is:
+
+```text
+scriptwriting_template/scripts/drafts/
+        ↓
+scriptwriting_template/scripts/archive/
+```
+
+### 1. Validate
+
+Validation checks the Pydantic script model, asset registry, asset files,
+word indexes, keyframes, captions, transitions, and provider configuration.
+
+```bash
+.venv/bin/python -m creatortainment validate <script.json>
+```
+
+To inspect effective asset-generation models:
+
+```bash
+.venv/bin/python -m creatortainment validate \
+  <script.json> \
+  --asset-gen-info
+```
+
+### 2. Generate missing assets
+
+Use this only when the script contains supported `generate` blocks and provider
+credentials are configured:
+
+```bash
+.venv/bin/python -m creatortainment generate-assets <script.json>
+```
+
+Existing assets are skipped unless `--force` is provided.
+
+### 3. Create a storyboard
+
+```bash
+.venv/bin/python -m creatortainment storyboard <script.json>
+```
+
+The storyboard verifies scene composition and rough caption placement without
+running full narration or video generation. Use `--out` to choose a project
+relative filename.
+
+### 4. Generate or reuse narration
+
+```bash
+.venv/bin/python -m creatortainment align <script.json>
+```
+
+This creates or reuses the narration audio and alignment manifest. Creatortainment
+normally reuses matching cached narration and asks before replacing it when a
+narration change requires a new take.
+
+Useful flags:
+
+- `--force-audio` — create a new narration take without confirmation
+- `--debug` — write diagnostics to the project folder
+
+### 5. Render a preview
+
+```bash
+.venv/bin/python -m creatortainment render \
+  <script.json> \
+  --preview \
+  --out output/preview.mp4
+```
+
+Preview rendering uses quarter resolution and faster encoding. Review timing,
+captions, assets, movement, narration, transitions, and scene boundaries before
+performing a full render.
+
+### 6. Render the final video
+
+```bash
+.venv/bin/python -m creatortainment render \
+  <script.json> \
+  --out output/final.mp4
+```
+
+Output paths are relative to the project directory.
+
+---
+
+## CLI reference
+
+### Commands
+
+| Command | Purpose |
+|---|---|
+| `validate` | Validate the script model, assets, timing, captions, and provider metadata |
+| `generate-assets` | Generate missing assets declared by the script |
+| `storyboard` | Create a static project-wide composition preview |
+| `align` | Generate or reuse narration and alignment data |
+| `render` | Build and encode a preview or full-resolution MP4 |
+
+### Command help
+
+```bash
+.venv/bin/python -m creatortainment --help
+.venv/bin/python -m creatortainment validate --help
+.venv/bin/python -m creatortainment generate-assets --help
+.venv/bin/python -m creatortainment align --help
+.venv/bin/python -m creatortainment storyboard --help
+.venv/bin/python -m creatortainment render --help
+```
+
+### CLI architecture
+
+The complete flow, including asset resolution, validation, narration caching,
+storyboards, scene construction, transitions, audio mixing, and encoding:
 
 ![Creatortainment CLI flow diagram](docs/creatortainment-cli-flow.svg)
 
 [Open the CLI flow diagram at full size](docs/creatortainment-cli-flow.svg)
 
-## Quick start: script to final video
+---
 
-This walkthrough uses the archived example script:
+## Projects and assets
 
-```text
-scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json
-```
+### Shared assets
 
-### 1. Install the full dependencies
-
-From the repository root:
-
-```bash
-.venv/bin/python -m pip install -e '.[full]'
-```
-
-If the virtual environment does not exist yet, create it first:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -e '.[full]'
-```
-
-### 2. Check the shared assets
-
-Every asset referenced by `asset_registry` must exist under
-`scriptwriting/assets/`.
-Validation catches missing files, invalid word indexes, invalid element
-keyframes, invalid transitions, and other script errors before rendering.
-Registry entries use an object with a project-relative `assets/...` path:
+Reusable assets live once in `scriptwriting/assets/` and can be used by every
+project.
 
 ```json
 "bg_studio": {
@@ -57,185 +323,14 @@ Registry entries use an object with a project-relative `assets/...` path:
 }
 ```
 
-The optional `generate` field may contain complete generation metadata for a
-pending asset. A missing `generate` field is equivalent to `generate: null`,
-so the file must already exist. All generated and reusable assets stay in the
-canonical `scriptwriting/assets/` directory; project folders never contain
-their own assets directory.
+The `generate` field may describe an asset that should be created by a
+provider. A missing file is allowed only if a non-null `generate` block can
+produce it.
 
-```bash
-.venv/bin/python -m creatortainment validate \
-  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json
-```
+Never put raw absolute filesystem paths in the script. Use asset registry keys
+and project-relative `assets/...` paths.
 
-## API keys / environment setup
-
-Create the local environment file from the committed template:
-
-```bash
-cp .env.example .env
-```
-
-Set `FAL_KEY` to your fal.ai API key and `ELEVENLABS_API_KEY` to your
-ElevenLabs API key in `.env`. Never commit `.env`; it is ignored by Git and
-must remain local.
-
-For ElevenLabs voice validation, the API key needs the `voices_read`
-permission. If you use a shared or community voice, add it to **My Voices**
-on the ElevenLabs Voices page before validating the script.
-
-Validation also performs read-only provider lookups for the ElevenLabs
-`project.tts_model` and `project.voice_id`, plus the effective fal.ai models
-required by generated assets. These checks verify metadata only; they do not
-generate audio or images and do not spend generation credits.
-
-If validation reports a missing asset, add that file at the path declared in
-the script's `asset_registry`, then run validation again. Shared assets live
-once at repository level and can be reused by every project.
-
-For the current Pac-Man script, the audio assets still needed in
-`assets/audio/` are:
-
-```text
-assets/audio/sfx/arcade_beep.mp3
-assets/audio/sfx/digital_glitch.mp3
-assets/audio/sfx/retro_error.mp3
-assets/audio/sfx/arcade_level_transition.mp3
-assets/audio/sfx/dramatic_reveal.mp3
-assets/audio/retro_arcade_mystery.mp3
-```
-
-The storyboard can still be generated while you are collecting or creating
-those audio files, because it only needs the visual assets. Validation must
-pass before alignment and video rendering can begin.
-
-### 3. Generate a storyboard
-
-A storyboard is the fastest way to inspect scene backgrounds, character
-placement, element sizing, and rough caption layout before spending time on
-audio or video rendering.
-
-Run the dedicated storyboard command:
-
-```bash
-.venv/bin/python -m creatortainment storyboard \
-  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json
-```
-
-By default, this creates the project folder if needed and writes:
-
-```text
-projects/pac-man-ghosts-were-never-smart/storyboard_YYYYMMDD_HHMMSS.png
-```
-
-To choose another output path inside the project folder:
-
-```bash
-.venv/bin/python -m creatortainment storyboard \
-  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json \
-  --out storyboard/iteration-02.png
-```
-
-This is the perfect stage for iteration. Open the JSON script, adjust scene
-backgrounds, element `pos` values, sizes, anchors, captions, or timing, and
-run the storyboard command again. Repeat until the visual plan feels good.
-The storyboard requires only a valid script and its visual assets; it does not
-call ElevenLabs or spend ElevenLabs credits. This is the fastest way to get a
-visual overview of the project before generating narration. ✨
-
-### 4. Generate or reuse narration alignment
-
-Once the storyboard is in a good place, create the narration and word timing
-manifest:
-
-```bash
-.venv/bin/python -m creatortainment align \
-  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json
-```
-
-The script's `project.voice_id` selects the default voice. Scenes may use
-ordered `narration_segments` for dialogue: each segment can inherit that
-default or specify its own `voice_id`, and local `start_at_word` anchors plus
-signed `start_offset_sec` values can create intentional overlap. Narration
-files and alignment sidecars are kept permanently in the stable project
-folder. If the same narration is already available, Creatortainment reuses it
-instead of making another API call. If the project already exists and the
-narration needs to change, the command asks for confirmation.
-
-For detailed diagnostics:
-
-```bash
-.venv/bin/python -m creatortainment align \
-  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json \
-  --debug
-```
-
-### 5. Make a fast preview video
-
-Preview rendering uses quarter resolution and faster encoding, making it ideal
-for checking:
-
-- scene order and timing
-- caption legibility and word highlighting
-- animated elements
-- pauses and narration alignment
-- music and sound-effect placement
-- transitions and overall pacing
-
-```bash
-.venv/bin/python -m creatortainment render \
-  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json \
-  --preview \
-  --out output/preview.mp4
-```
-
-The output is written relative to the project folder:
-
-```text
-projects/pac-man-ghosts-were-never-smart/output/render_YYYYMMDD_HHMMSS_preview.mp4
-```
-
-Watch the preview before starting a full render. If something feels off,
-edit the script, regenerate the storyboard if the layout changed, re-run
-`align` if narration text changed, and render another preview. This is where
-most creative decisions are cheapest to fix. 🎨
-
-### 6. Render the final full-resolution video
-
-When the storyboard and preview look right, render at the script's actual
-`project.resolution`:
-
-```bash
-.venv/bin/python -m creatortainment render \
-  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json \
-  --out output/final.mp4
-```
-
-Final output:
-
-```text
-projects/pac-man-ghosts-were-never-smart/output/render_YYYYMMDD_HHMMSS.mp4
-```
-
-Full-resolution rendering can take a while, especially for portrait videos
-with animated elements and audio mixing. Start the command, watch the progress
-bar, and make yourself a cup of coffee while MoviePy does its thing. ☕
-
-For a more descriptive filename:
-
-```bash
-.venv/bin/python -m creatortainment render \
-  scriptwriting/scripts/archive/pac_man_ghosts_were_never_smart.json \
-  --out output/pac-man-ghosts-were-never-smart-final.mp4
-```
-
-That file will be written to:
-
-```text
-projects/pac-man-ghosts-were-never-smart/output/render_YYYYMMDD_HHMMSS.mp4
-```
-
-## What gets created
+### Project output
 
 Projects use a stable title-based folder under `projects/`:
 
@@ -247,186 +342,169 @@ projects/pac-man-ghosts-were-never-smart/
 ├── build_manifests/
 ├── narrations/
 ├── storyboard_YYYYMMDD_HHMMSS.png
-├── output/
-│   ├── render_YYYYMMDD_HHMMSS_preview.mp4
-│   └── render_YYYYMMDD_HHMMSS.mp4
+└── output/
+    ├── render_YYYYMMDD_HHMMSS_preview.mp4
+    └── render_YYYYMMDD_HHMMSS.mp4
 ```
 
-The script-specific manifest under `build_manifests/` is used when available.
-Older projects may still use the project-level `build_manifest.json`.
+The project script copy, narration cache, alignment manifest, storyboards, and
+renders belong there. Project folders do not own reusable assets.
 
-## Editing guide
+---
 
-The main authoring file is the JSON script. Useful fields include:
+## Editing scripts
 
-- `project.resolution` and `project.fps` for output format
-- `project.caption_style` for video-wide caption defaults
-- `scene.caption_style` for scene-level caption overrides
-- `scene.elements` and their keyframes for animated visual placement
-- `scene.pause_before_sec` for intentional silent gaps
-- `scene.transition_in` for transition settings
-- `scene.bg_music` for music change, stop, and restart events
-- `scene.sfx` for one-shot sound effects
-- `project.duck_to_narration_pct` and scene overrides for music loudness
+The main authoring file is JSON. Important sections include:
 
-Use asset keys from `asset_registry`, not raw filesystem paths. Keep reusable
-images and audio in `assets/`; generated project files belong in
-`projects/<project-slug>/`.
+- `project.resolution` and `project.fps`
+- `project.caption_style`
+- `scene.caption_style`
+- `scene.elements` and keyframes
+- `scene.pause_before_sec`
+- `scene.transition_in`
+- `scene.bg_music`
+- `scene.sfx`
+- `project.duck_to_narration_pct`
+- narration text and optional narration segments
 
-## CLI commands
+For the complete authoring rules, start with:
 
-### Scriptwriting workspace
+- [`scriptwriting_template/docs/SCRIPT_STRUCTURE.md`](scriptwriting_template/docs/SCRIPT_STRUCTURE.md)
+- [`scriptwriting_template/docs/SCRIPT_CONVENTIONS.md`](scriptwriting_template/docs/SCRIPT_CONVENTIONS.md)
+- [`scriptwriting_template/docs/WRITING_GUIDELINES.md`](scriptwriting_template/docs/WRITING_GUIDELINES.md)
+- [`scriptwriting_template/docs/ASSET_LIBRARY_GUIDELINES.md`](scriptwriting_template/docs/ASSET_LIBRARY_GUIDELINES.md)
 
-The local `scriptwriting/` workspace provides a separate, gitignored context
-for writing scripts. Production `assets/` remains authoritative; the
-scriptwriting asset library is a curated discovery copy with sidecars and
-indexes. Setup, lifecycle, direct CLI workflow, and bootstrap details are in
-[`docs/SCRIPTWRITING_WORKSPACE.md`](docs/SCRIPTWRITING_WORKSPACE.md).
-
-The tracked [`scriptwriting_template/`](scriptwriting_template/) directory is
-the clean public starting point for creating a local `scriptwriting/`
-workspace. Do not run scripts directly from the template. Copy or use its
-structure to initialize `scriptwriting/`, which is the actual local,
-gitignored workspace used by the scriptwriting agent. It contains generic
-documentation and empty directory placeholders only.
-
-### Validate
-
-```bash
-.venv/bin/python -m creatortainment validate <script.json>
-```
-
-Validates the typed script model, referenced assets, word indexes, element
-keyframes, caption values, music cues, and transition shapes.
-
-Invalid scripts are reported with JSON paths and readable explanations instead
-of repeated raw Pydantic messages. Repeated identical schema errors are grouped
-by path. For example, legacy string-valued asset entries are identified with a
-hint to use the current object format:
-
-```text
-✗ asset_registry.white_portrait.jpg
-  Expected an asset object, but got a string ('assets/backgrounds/white_portrait.jpg').
-Hint: asset_registry entries must use the current object format.
-This script appears to use the legacy string format.
-```
-
-For generated assets, the effective fal.ai model is resolved from the
-asset-level `generate.model` first, then
-`project.generation_defaults[generation_method]`. Only generation methods
-actually used by generated assets require a valid model. If several assets
-share the same missing model configuration, validation groups the errors by
-method instead of printing one error per asset:
-
-```text
-Asset generation:
-- No model configured for image_to_image (11 assets)
-- No model configured for text_to_image (17 assets)
-```
-
-Use `--asset-gen-info` to print the detailed generation plan for every
-generated asset, including its asset key, generation method, effective model,
-and source asset when applicable:
-
-```bash
-.venv/bin/python -m creatortainment validate \
-  <script.json> \
-  --asset-gen-info
-```
-
-Static assets are omitted from this report. An unresolved effective model is
-shown as `<unresolved>`, even when validation fails, so the report can be
-used to identify the missing configuration. Provider failures are reported
-with concise status or configuration details; raw HTTP headers, trace IDs,
-and full API response bodies are not printed.
-
-### Generate assets
-
-Generate all missing assets with a non-null `generate` block in a current-format
-script:
-
-```bash
-.venv/bin/python -m creatortainment generate-assets <script.json>
-```
-
-The command resolves each asset's model from `generate.model`, then
-`project.generation_defaults[generation_method]`, creates destination
-directories, and processes source-asset dependencies before their consumers.
-Existing files are skipped by default. Use `--force` to regenerate them:
-
-```bash
-.venv/bin/python -m creatortainment generate-assets <script.json> --force
-```
-
-Image generation uses the project's explicit `project.resolution`; it does not
-infer dimensions from prompt text. FAL credentials are loaded from `FAL_KEY`
-in the repository `.env` setup described above.
-
-### Storyboard
-
-Once you have all the assets for your video, you can generate a storyboard to
-see what the project will look like:
-
-```bash
-.venv/bin/python -m creatortainment storyboard <script.json>
-```
-
-This is the fastest way to get an overview of the project's scenes, asset
-placement, composition, and captions before spending time on narration
-alignment or a video render. The storyboard is written to the project's
-`storyboard_YYYYMMDD_HHMMSS.png` file. Use `--out <path>` to choose another
-output path inside the project folder. Existing storyboard and render files are
-never overwritten; a timestamped alternative name is selected when needed.
-
-### Align
-
-```bash
-.venv/bin/python -m creatortainment align <script.json>
-```
-
-Generates or reuses the full-video ElevenLabs narration, word alignment, and
-build manifest.
-
-Useful flags:
-
-- `--force-audio` — skip confirmation and create a new narration take
-- `--debug` — write request and response diagnostics to
-  `projects/<slug>/debug.log` without recording the API key
-
-### Render
-
-```bash
-.venv/bin/python -m creatortainment render <script.json>
-```
-
-Useful flags:
-
-- `--preview` — quarter-resolution, faster render
-- `--out <path>` — output path relative to the project directory
-
-For command help:
-
-```bash
-.venv/bin/python -m creatortainment --help
-.venv/bin/python -m creatortainment validate --help
-.venv/bin/python -m creatortainment generate-assets --help
-.venv/bin/python -m creatortainment align --help
-.venv/bin/python -m creatortainment render --help
-.venv/bin/python -m creatortainment storyboard --help
-```
+---
 
 ## Running tests
 
-The test suite is offline and mocks provider lookups, so it does not call
-ElevenLabs or fal.ai or spend API credits:
+The test suite is designed to work offline and mock provider lookups. It should
+not call ElevenLabs or fal.ai or spend API credits:
 
 ```bash
 .venv/bin/python -m pytest
 ```
 
-The tests cover schema validation, asset checks, tokenization, narration
-caching, alignment, caption rendering, animated elements, timeline mapping,
-music/SFX mixing, and final audio attachment.
+Tests cover:
+
+- typed script schema and validation
+- asset registry and missing assets
+- narration caching and alignment
+- scene boundaries and captions
+- text and image elements
+- keyframes, anchors, camera motion, and z-order
+- CFR and VFR video timing
+- transitions and timeline mapping
+- music and SFX mixing
+- storyboard and CLI rendering paths
+
+---
+
+## Contribute to Creatortainment
+
+Feel free to try it out and report any issues you run into. You can make pull
+requests or just reach out if you want to connect.
+
+Useful contributions include:
+
+- schema and validation improvements
+- rendering and timeline fixes
+- asset organization and bootstrap tooling
+- scriptwriting documentation and examples
+- agent instructions and reusable knowledge
+- tests, fixtures, and reproducible render bugs
+
+Before submitting a pull request:
+
+1. Create an isolated branch.
+2. Make the change narrowly focused.
+3. Add or update focused tests.
+4. Run:
+
+```bash
+.venv/bin/python -m pytest
+git diff --check
+```
+
+5. Verify real CLI behavior for rendering changes.
+6. Never commit `.env`, API keys, private assets, generated projects, or
+   personal `agent_knowledge/`.
+
+`scriptwriting/` and `projects/` are gitignored working areas. Changes to
+public agent behavior should normally go in `scriptwriting_template/`;
+repository implementation changes go in `creatortainment/`.
+
+### Development setup
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[full]'
+cp .env.example .env
+```
+
+API credentials are optional for offline schema and rendering tests. Do not
+include secrets in fixtures, logs, debug output, screenshots, or test files.
+
+### Reporting bugs or requesting features
+
+[Open a GitHub issue](https://github.com/Michago6/creatortainment/issues) with:
+
+- the exact command or workflow used
+- the relevant script or a minimal reproduction
+- OS, Python, FFmpeg, and MoviePy versions
+- preview vs. full-resolution behavior
+- source asset metadata when playback or VFR timing is involved
+- expected behavior
+- actual behavior
+- screenshots or a short terminal/video sample if relevant
+- the shortest useful log excerpt
+
+Remove secrets and private asset URLs before posting. If possible, attach or
+describe a small offline fixture that reproduces the issue without ElevenLabs
+or fal.ai API calls.
+
+For playback-speed regressions, include source and output duration, FPS/PTS
+metadata, recognizable frame positions, and whether the affected asset is CFR
+or VFR.
+
+For narration or scene-boundary regressions, include:
+
+- source narration audio
+- alignment timestamps
+- scene IDs
+- the scene boundary
+- whether a transition is present
+- a short clip demonstrating the problem
+
+---
+
+## Troubleshooting
+
+### A referenced asset is missing
+
+Add or generate the file at the exact `asset_registry` path under
+`scriptwriting/assets/`, then validate again.
+
+### Narration will not align or voice validation fails
+
+Check `.env`, the ElevenLabs voice ID, model support, and the API key's
+`voices_read` permission.
+
+### No build manifest exists
+
+Run `align` before `render`. A project may contain cached narration in
+`narrations/`, but it still needs the matching build manifest.
+
+### Output is not visible immediately
+
+Scene construction, audio mixing, and encoding have separate progress stages.
+Full-resolution portrait renders can take substantially longer than previews.
+
+### Existing outputs are not overwritten
+
+Creatortainment selects a timestamped alternative name when a storyboard or
+render destination already exists. Use `--out` to choose a project-relative
+name.
 
 ## A small piece of advice
 
