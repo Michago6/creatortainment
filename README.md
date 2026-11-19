@@ -81,20 +81,7 @@ For ElevenLabs voice validation, the API key needs the `voices_read`
 permission. Community/shared voices may need to be added to **My Voices**
 before being able to be used.
 
-### 2. Create the local scriptwriting workspace
-
-The public template is tracked in `scriptwriting_template/`. The working
-workspace is `scriptwriting/`, and it is gitignored.
-
-```bash
-cp -a scriptwriting_template/. scriptwriting/
-```
-
-Detailed setup is in
-[`scriptwriting_template/docs/AGENT_SETUP.md`](scriptwriting_template/docs/AGENT_SETUP.md)
-and [`docs/SCRIPTWRITING_WORKSPACE.md`](docs/SCRIPTWRITING_WORKSPACE.md).
-
-### 3. Discover and organize reusable assets
+### 2. Discover and organize reusable assets
 
 Place reusable images, videos, music, and sound effects under
 `scriptwriting/assets/`. Organize them by category manually or let an AI agent do it, for example:
@@ -119,7 +106,7 @@ Assets are normally shared across projects. Scripts reference them through the
 `asset_registry` using stable keys and `assets/...` paths, not absolute local
 paths.
 
-### 4. Start an agent in the workspace
+### 3. Start an agent in the workspace
 
 For GitHub Copilot CLI:
 
@@ -151,7 +138,7 @@ Create a storyboard for the draft and point out missing assets.
 Do not generate narration or render the full video.
 ```
 
-### 5. Reuse learned preferences
+### 4. Reuse learned preferences
 
 At the start of a script project, the scriptwriting agent reads
 `agent_knowledge/INDEX.md`, then only the knowledge files relevant to the
@@ -181,8 +168,7 @@ The archived Pac-Man script is a useful public example:
 scriptwriting_template/scripts/archive/pac_man_ghosts_were_never_smart.json
 ```
 
-After copying `scriptwriting_template/` into `scriptwriting/`, run the public
-example directly from the template archive:
+Run the public Pac-Man example directly from the template archive:
 
 ```bash
 .venv/bin/python -m creatortainment validate \
@@ -206,7 +192,11 @@ word indexes, keyframes, captions, transitions, and provider configuration.
 .venv/bin/python -m creatortainment validate <script.json>
 ```
 
-To inspect effective asset-generation models:
+If a script references a missing asset with a `generate` property, use the
+`--asset-gen-info` flag with `validate` to preview exactly what the
+`generate-assets` command would generate. It shows the effective provider
+model for each missing asset and reports how each asset's generation method
+and model are resolved:
 
 ```bash
 .venv/bin/python -m creatortainment validate \
@@ -237,6 +227,9 @@ relative filename.
 
 ### 4. Generate or reuse narration
 
+> [!WARNING]
+> This step calls the ElevenLabs API when new narration is required and will
+> consume ElevenLabs credits. 
 ```bash
 .venv/bin/python -m creatortainment align <script.json>
 ```
@@ -405,54 +398,20 @@ Tests cover:
 Feel free to try it out and report any issues you run into. You can make pull
 requests or just reach out if you want to connect.
 
-Useful contributions include:
-
-- schema and validation improvements
-- rendering and timeline fixes
-- asset organization and bootstrap tooling
-- scriptwriting documentation and examples
-- agent instructions and reusable knowledge
-- tests, fixtures, and reproducible render bugs
-
-Before submitting a pull request:
-
-1. Create an isolated branch.
-2. Make the change narrowly focused.
-3. Add or update focused tests.
-4. Run:
-
-```bash
-.venv/bin/python -m pytest
-git diff --check
-```
-
-5. Verify real CLI behavior for rendering changes.
-6. Never commit `.env`, API keys, private assets, generated projects, or
-   personal `agent_knowledge/`.
-
 `scriptwriting/` and `projects/` are gitignored working areas. Changes to
 public agent behavior should normally go in `scriptwriting_template/`;
 repository implementation changes go in `creatortainment/`.
-
-### Development setup
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -e '.[full]'
-cp .env.example .env
-```
 
 API credentials are optional for offline schema and rendering tests. Do not
 include secrets in fixtures, logs, debug output, screenshots, or test files.
 
 ### Reporting bugs or requesting features
 
-[Open a GitHub issue](https://github.com/Michago6/creatortainment/issues) with:
+[Open a GitHub issue](https://github.com/Michago6/creatortainment/issues) preferably with:
 
 - the exact command or workflow used
 - the relevant script or a minimal reproduction
 - OS, Python, FFmpeg, and MoviePy versions
-- preview vs. full-resolution behavior
 - source asset metadata when playback or VFR timing is involved
 - expected behavior
 - actual behavior
