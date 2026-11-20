@@ -81,7 +81,7 @@
       }
     },
     "test_audio_to_audio_source": {
-      "path": "assets/audio/mojang_please_hire_me_joabi.mp3",
+      "path": "assets/audio/test_generation_text_to_audio.mp3",
       "generate": null
     }
   },
