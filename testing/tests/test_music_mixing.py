@@ -23,7 +23,7 @@ from creatortainment.render.timeline import build_scene_final_offsets
 
 
 ROOT = Path(__file__).parents[2]
-PROJECT = ROOT / "projects/understanding_gpu_architecture"
+PROJECT = ROOT / "testing"
 ASSETS = ROOT / "testing/assets"
 
 
@@ -37,7 +37,7 @@ def _script() -> dict:
 
 def _manifest() -> dict:
     return json.loads(
-        (PROJECT / "build_manifests/example_script.json").read_text(encoding="utf-8")
+        (ROOT / "testing/fixtures/manifests/example_script.json").read_text(encoding="utf-8")
     )
 
 
@@ -134,7 +134,9 @@ def test_music_phase_continues_across_null_scene_boundary() -> None:
     script = _script()
     manifest = _manifest()
     offsets = build_scene_final_offsets(script, manifest)
-    narration_loudness = measure_loudness(next((PROJECT / "narrations").glob("*.mp3")))
+    narration_loudness = measure_loudness(
+        ASSETS / "audio/narration/test_narration.mp3"
+    )
     track = build_background_music_track(
         script,
         manifest,
@@ -224,7 +226,7 @@ def test_real_music_asset_is_looped_to_full_required_stretch() -> None:
     script = _script()
     manifest = _manifest()
     narration_loudness = measure_loudness(
-        next((PROJECT / "narrations").glob("*.mp3"))
+        ASSETS / "audio/narration/test_narration.mp3"
     )
     track = build_background_music_track(
         script,

@@ -1,0 +1,521 @@
+{
+  "narration_hash": "9cd430285f2c51165b2ea670067d5150111218c3c5dfa97e2d66e05271ba1010",
+  "narration_audio_path": "assets/audio/narration/test_narration.mp3",
+  "word_timestamps": [
+    {
+      "word": "Hey",
+      "start": 0.0,
+      "end": 0.29
+    },
+    {
+      "word": "everyone,",
+      "start": 0.36,
+      "end": 1.01
+    },
+    {
+      "word": "welcome",
+      "start": 1.219,
+      "end": 1.672
+    },
+    {
+      "word": "back",
+      "start": 1.707,
+      "end": 1.881
+    },
+    {
+      "word": "to",
+      "start": 1.939,
+      "end": 1.997
+    },
+    {
+      "word": "the",
+      "start": 2.055,
+      "end": 2.125
+    },
+    {
+      "word": "channel!",
+      "start": 2.171,
+      "end": 2.821
+    },
+    {
+      "word": "Let's",
+      "start": 3.262,
+      "end": 3.553
+    },
+    {
+      "word": "talk",
+      "start": 3.611,
+      "end": 3.82
+    },
+    {
+      "word": "about",
+      "start": 3.866,
+      "end": 4.087
+    },
+    {
+      "word": "GPUs",
+      "start": 4.133,
+      "end": 4.609
+    },
+    {
+      "word": "today.",
+      "start": 4.679,
+      "end": 5.213
+    },
+    {
+      "word": "Inside",
+      "start": 5.538,
+      "end": 6.107
+    },
+    {
+      "word": "every",
+      "start": 6.165,
+      "end": 6.478
+    },
+    {
+      "word": "GPU",
+      "start": 6.536,
+      "end": 7.012
+    },
+    {
+      "word": "there",
+      "start": 7.093,
+      "end": 7.256
+    },
+    {
+      "word": "are",
+      "start": 7.291,
+      "end": 7.407
+    },
+    {
+      "word": "thousands",
+      "start": 7.465,
+      "end": 7.987
+    },
+    {
+      "word": "of",
+      "start": 8.034,
+      "end": 8.138
+    },
+    {
+      "word": "tiny",
+      "start": 8.22,
+      "end": 8.533
+    },
+    {
+      "word": "cores",
+      "start": 8.603,
+      "end": 8.963
+    },
+    {
+      "word": "working",
+      "start": 9.032,
+      "end": 9.357
+    },
+    {
+      "word": "together",
+      "start": 9.392,
+      "end": 9.787
+    },
+    {
+      "word": "to",
+      "start": 9.88,
+      "end": 9.973
+    },
+    {
+      "word": "get",
+      "start": 10.031,
+      "end": 10.158
+    },
+    {
+      "word": "things",
+      "start": 10.205,
+      "end": 10.437
+    },
+    {
+      "word": "done.",
+      "start": 10.483,
+      "end": 11.018
+    },
+    {
+      "word": "Your",
+      "start": 11.401,
+      "end": 11.633
+    },
+    {
+      "word": "CPU",
+      "start": 11.703,
+      "end": 12.086
+    },
+    {
+      "word": "has",
+      "start": 12.155,
+      "end": 12.26
+    },
+    {
+      "word": "a",
+      "start": 12.306,
+      "end": 12.329
+    },
+    {
+      "word": "few",
+      "start": 12.399,
+      "end": 12.585
+    },
+    {
+      "word": "powerful",
+      "start": 12.643,
+      "end": 13.084
+    },
+    {
+      "word": "cores,",
+      "start": 13.154,
+      "end": 13.746
+    },
+    {
+      "word": "but",
+      "start": 13.792,
+      "end": 13.932
+    },
+    {
+      "word": "a",
+      "start": 13.978,
+      "end": 14.001
+    },
+    {
+      "word": "GPU",
+      "start": 14.036,
+      "end": 14.419
+    },
+    {
+      "word": "trades",
+      "start": 14.477,
+      "end": 14.791
+    },
+    {
+      "word": "raw",
+      "start": 14.884,
+      "end": 15.104
+    },
+    {
+      "word": "power",
+      "start": 15.174,
+      "end": 15.545
+    },
+    {
+      "word": "for",
+      "start": 15.662,
+      "end": 15.824
+    },
+    {
+      "word": "sheer",
+      "start": 15.894,
+      "end": 16.172
+    },
+    {
+      "word": "numbers",
+      "start": 16.288,
+      "end": 16.706
+    },
+    {
+      "word": "instead.",
+      "start": 16.776,
+      "end": 17.415
+    },
+    {
+      "word": "That",
+      "start": 17.925,
+      "end": 18.181
+    },
+    {
+      "word": "means",
+      "start": 18.251,
+      "end": 18.529
+    },
+    {
+      "word": "thousands",
+      "start": 18.599,
+      "end": 19.075
+    },
+    {
+      "word": "of",
+      "start": 19.11,
+      "end": 19.179
+    },
+    {
+      "word": "calculations",
+      "start": 19.249,
+      "end": 19.98
+    },
+    {
+      "word": "can",
+      "start": 20.038,
+      "end": 20.166
+    },
+    {
+      "word": "happen",
+      "start": 20.236,
+      "end": 20.491
+    },
+    {
+      "word": "at",
+      "start": 20.538,
+      "end": 20.596
+    },
+    {
+      "word": "the",
+      "start": 20.631,
+      "end": 20.7
+    },
+    {
+      "word": "exact",
+      "start": 20.758,
+      "end": 21.118
+    },
+    {
+      "word": "same",
+      "start": 21.165,
+      "end": 21.385
+    },
+    {
+      "word": "time,",
+      "start": 21.42,
+      "end": 21.966
+    },
+    {
+      "word": "all",
+      "start": 22.175,
+      "end": 22.442
+    },
+    {
+      "word": "at",
+      "start": 22.511,
+      "end": 22.569
+    },
+    {
+      "word": "once!",
+      "start": 22.651,
+      "end": 23.231
+    },
+    {
+      "word": "This",
+      "start": 23.742,
+      "end": 23.986
+    },
+    {
+      "word": "is",
+      "start": 24.056,
+      "end": 24.16
+    },
+    {
+      "word": "exactly",
+      "start": 24.242,
+      "end": 24.718
+    },
+    {
+      "word": "why",
+      "start": 24.776,
+      "end": 24.915
+    },
+    {
+      "word": "GPUs",
+      "start": 24.996,
+      "end": 25.472
+    },
+    {
+      "word": "are",
+      "start": 25.53,
+      "end": 25.647
+    },
+    {
+      "word": "perfect",
+      "start": 25.693,
+      "end": 26.123
+    },
+    {
+      "word": "for",
+      "start": 26.157,
+      "end": 26.285
+    },
+    {
+      "word": "rendering",
+      "start": 26.343,
+      "end": 26.726
+    },
+    {
+      "word": "graphics,",
+      "start": 26.761,
+      "end": 27.504
+    },
+    {
+      "word": "and",
+      "start": 27.678,
+      "end": 27.829
+    },
+    {
+      "word": "increasingly",
+      "start": 27.887,
+      "end": 28.479
+    },
+    {
+      "word": "for",
+      "start": 28.595,
+      "end": 28.746
+    },
+    {
+      "word": "training",
+      "start": 28.816,
+      "end": 29.188
+    },
+    {
+      "word": "AI",
+      "start": 29.246,
+      "end": 29.524
+    },
+    {
+      "word": "models",
+      "start": 29.582,
+      "end": 29.919
+    },
+    {
+      "word": "too.",
+      "start": 29.989,
+      "end": 30.418
+    },
+    {
+      "word": "Thanks",
+      "start": 30.859,
+      "end": 31.219
+    },
+    {
+      "word": "so",
+      "start": 31.254,
+      "end": 31.417
+    },
+    {
+      "word": "much",
+      "start": 31.486,
+      "end": 31.684
+    },
+    {
+      "word": "for",
+      "start": 31.73,
+      "end": 31.846
+    },
+    {
+      "word": "watching,",
+      "start": 31.916,
+      "end": 32.496
+    },
+    {
+      "word": "and",
+      "start": 32.705,
+      "end": 32.833
+    },
+    {
+      "word": "I",
+      "start": 32.903,
+      "end": 32.926
+    },
+    {
+      "word": "will",
+      "start": 32.996,
+      "end": 33.158
+    },
+    {
+      "word": "catch",
+      "start": 33.228,
+      "end": 33.483
+    },
+    {
+      "word": "you",
+      "start": 33.53,
+      "end": 33.646
+    },
+    {
+      "word": "in",
+      "start": 33.715,
+      "end": 33.785
+    },
+    {
+      "word": "the",
+      "start": 33.82,
+      "end": 33.89
+    },
+    {
+      "word": "next",
+      "start": 33.924,
+      "end": 34.133
+    },
+    {
+      "word": "one.",
+      "start": 34.203,
+      "end": 34.586
+    },
+    {
+      "word": "Bye",
+      "start": 35.097,
+      "end": 35.411
+    },
+    {
+      "word": "for",
+      "start": 35.527,
+      "end": 35.701
+    },
+    {
+      "word": "now!",
+      "start": 35.782,
+      "end": 36.409
+    }
+  ],
+  "scenes": [
+    {
+      "id": "scene_1_intro",
+      "word_offset": 0,
+      "word_count": 12,
+      "start_time_sec": 0.0,
+      "end_time_sec": 5.213,
+      "duration_sec": 5.213
+    },
+    {
+      "id": "scene_2_setup",
+      "word_offset": 12,
+      "word_count": 15,
+      "start_time_sec": 5.538,
+      "end_time_sec": 11.018,
+      "duration_sec": 5.48
+    },
+    {
+      "id": "scene_3_contrast",
+      "word_offset": 27,
+      "word_count": 17,
+      "start_time_sec": 11.401,
+      "end_time_sec": 17.415,
+      "duration_sec": 6.013999999999999
+    },
+    {
+      "id": "scene_4_payoff",
+      "word_offset": 44,
+      "word_count": 15,
+      "start_time_sec": 17.925,
+      "end_time_sec": 23.231,
+      "duration_sec": 5.306000000000001
+    },
+    {
+      "id": "scene_5_wrapup",
+      "word_offset": 59,
+      "word_count": 17,
+      "start_time_sec": 23.742,
+      "end_time_sec": 30.418,
+      "duration_sec": 6.675999999999998
+    },
+    {
+      "id": "scene_6_outro",
+      "word_offset": 76,
+      "word_count": 17,
+      "start_time_sec": 30.859,
+      "end_time_sec": 36.409,
+      "duration_sec": 5.549999999999997
+    }
+  ]
+}

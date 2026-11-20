@@ -21,10 +21,10 @@ from creatortainment.render.visual_assets import first_frame_image, load_visual_
 
 ROOT = Path(__file__).parents[2]
 ASSETS = ROOT / "testing/assets"
-PRODUCTION_ASSETS = ROOT / "scriptwriting/assets"
+PRODUCTION_ASSETS = ASSETS
 IMAGES = ASSETS / "images"
 BACKGROUNDS = ASSETS / "backgrounds"
-PRODUCTION_IMAGES = PRODUCTION_ASSETS / "images"
+PRODUCTION_IMAGES = ASSETS / "images"
 
 
 def _script() -> dict:
@@ -133,7 +133,7 @@ def test_short_mp4_loops_to_exact_duration_and_has_no_audio() -> None:
 
 
 def test_vfr_source_uses_presentation_timestamps() -> None:
-    path = PRODUCTION_ASSETS / "backgrounds/tierlist/mandelbrot_set_tierlist.mp4"
+    path = ASSETS / "video/mandelbrot_set_tierlist.mp4"
     timestamps = visual_assets._vfr_frame_timestamps(path)
     assert timestamps is not None
     assert len(timestamps) > 40
@@ -161,7 +161,7 @@ def test_vfr_assets_use_exact_decoded_frames_at_early_middle_and_late_times() ->
         "newton_tierlist.mp4",
     )
     for filename in cases:
-        path = next(PRODUCTION_ASSETS.rglob(filename))
+        path = ASSETS / "video" / filename
         timestamps = visual_assets._vfr_frame_timestamps(path)
         assert timestamps is not None
         source = VideoFileClip(str(path), audio=False)
@@ -326,7 +326,7 @@ def test_two_frame_gif_scene_element_preserves_scaling_and_position() -> None:
         script,
         script["scenes"][0],
         {"duration_sec": 1.2},
-        PRODUCTION_ASSETS,
+        ASSETS,
     )
     try:
         element_layer = clip.clips[1]
@@ -353,7 +353,7 @@ def test_keyframe_driven_animated_elements_keep_transformations() -> None:
     element = next(item for item in scene["elements"] if item["id"] == "main_character")
     element["asset"] = "test_visual"
     manifest = json.loads(
-        (ROOT / "projects/understanding_gpu_architecture/build_manifests/example_script.json").read_text(
+        (ROOT / "testing/fixtures/manifests/example_script.json").read_text(
             encoding="utf-8"
         )
     )

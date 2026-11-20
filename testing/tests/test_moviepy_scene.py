@@ -220,11 +220,11 @@ def test_full_video_concatenates_all_manifest_scenes_in_order() -> None:
     """The full clip duration equals the sum of all scene durations."""
     script = _script("example_script.json")
     manifest = json.loads(
-        (ROOT / "projects/understanding_gpu_architecture/build_manifests/example_script.json").read_text(
+        (ROOT / "testing/fixtures/manifests/example_script.json").read_text(
             encoding="utf-8"
         )
     )
-    clip = build_full_video_clip(script, manifest, ASSETS, ROOT / "projects/understanding_gpu_architecture")
+    clip = build_full_video_clip(script, manifest, ASSETS, ROOT / "testing")
     try:
         expected = sum(float(scene["duration_sec"]) for scene in manifest["scenes"])
         expected += sum(
@@ -242,7 +242,7 @@ def test_preview_scene_numbers_are_fixed_top_right_overlays() -> None:
     manifest = json.loads(
         (
             ROOT
-            / "projects/understanding_gpu_architecture/build_manifests/example_script.json"
+            / "testing/fixtures/manifests/example_script.json"
         ).read_text(encoding="utf-8")
     )
     preview_script = deepcopy(script)
@@ -251,14 +251,14 @@ def test_preview_scene_numbers_are_fixed_top_right_overlays() -> None:
         preview_script,
         manifest,
         ASSETS,
-        ROOT / "projects/understanding_gpu_architecture",
+        ROOT / "testing",
         show_scene_numbers=True,
     )
     normal = build_full_video_clip(
         preview_script,
         manifest,
         ASSETS,
-        ROOT / "projects/understanding_gpu_architecture",
+        ROOT / "testing",
     )
     try:
         overlays = [
@@ -290,7 +290,7 @@ def test_full_video_inherits_backgrounds_across_scenes() -> None:
     manifest = json.loads(
         (
             ROOT
-            / "projects/understanding_gpu_architecture/build_manifests/example_script.json"
+            / "testing/fixtures/manifests/example_script.json"
         ).read_text(encoding="utf-8")
     )
 
@@ -298,7 +298,7 @@ def test_full_video_inherits_backgrounds_across_scenes() -> None:
         script,
         manifest,
         ASSETS,
-        ROOT / "projects/understanding_gpu_architecture",
+        ROOT / "testing",
     )
     try:
         assert clip.duration > 0
@@ -311,7 +311,7 @@ def test_animated_caption_is_blank_then_advances_and_holds_final_word() -> None:
     """Aligned scene captions are transparent before speech and cache active states."""
     script = _script("example_script.json")
     manifest = json.loads(
-        (ROOT / "projects/understanding_gpu_architecture/build_manifests/example_script.json").read_text(
+        (ROOT / "testing/fixtures/manifests/example_script.json").read_text(
             encoding="utf-8"
         )
     )

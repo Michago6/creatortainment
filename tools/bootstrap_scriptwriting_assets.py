@@ -142,7 +142,8 @@ def _inspect_frames(source: Path, curated: Path) -> list[str]:
         subprocess.run(
             [
                 "ffmpeg", "-y", "-loglevel", "error", "-ss", f"{timestamp:.3f}",
-                "-i", str(source), "-frames:v", "1", "-vf", "scale=640:-1",
+                "-i", str(source), "-frames:v", "1", "-pix_fmt", "yuvj420p",
+                "-vf", "scale=640:-1",
                 str(output),
             ],
             check=True,

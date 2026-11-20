@@ -13,7 +13,7 @@ from creatortainment.render.moviepy_scene import attach_scene_narration, build_s
 
 ROOT = Path(__file__).parents[2]
 ASSETS = ROOT / "testing/assets"
-PROJECT = ROOT / "projects/understanding_gpu_architecture"
+PROJECT = ROOT / "testing"
 
 
 def test_scene_narration_slice_matches_manifest_duration() -> None:
@@ -21,7 +21,11 @@ def test_scene_narration_slice_matches_manifest_duration() -> None:
     script = json.loads(
         (ROOT / "testing/scripts/example_script.json").read_text(encoding="utf-8")
     )
-    manifest = json.loads((PROJECT / "build_manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (ROOT / "testing/fixtures/manifests/example_script.json").read_text(
+            encoding="utf-8"
+        )
+    )
     scene_manifest = manifest["scenes"][0]
     clip = build_static_scene_clip(script, script["scenes"][0], scene_manifest, ASSETS)
     audio = None

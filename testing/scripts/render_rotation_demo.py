@@ -12,8 +12,8 @@ from creatortainment.render.moviepy_scene import build_static_scene_clip
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "testing" / "assets"
-NARRATION = next((ROOT / "projects/understanding_gpu_architecture/narrations").glob("*.mp3"))
-OUTPUT = ROOT / "projects/rotation_demo/rotation_demo.mp4"
+NARRATION = ROOT / "testing/assets/audio/narration/test_narration.mp3"
+OUTPUT = ROOT / "testing/output/rotation_demo.mp4"
 RESOLUTION = (1080, 1920)
 SCENE_DURATION = 1.5
 

@@ -13,7 +13,7 @@ from creatortainment.render.moviepy_scene import build_full_video_clip
 
 
 ROOT = Path(__file__).parents[2]
-PROJECT = ROOT / "projects/understanding_gpu_architecture"
+PROJECT = ROOT / "testing"
 ASSETS = ROOT / "testing/assets"
 
 
@@ -25,7 +25,7 @@ def _script() -> dict:
 
 def _manifest() -> dict:
     return json.loads(
-        (PROJECT / "build_manifests/example_script.json").read_text(encoding="utf-8")
+        (ROOT / "testing/fixtures/manifests/example_script.json").read_text(encoding="utf-8")
     )
 
 

@@ -32,7 +32,7 @@ def _script() -> dict:
 def _manifest() -> dict:
     """Load the real aligned portrait manifest."""
     return json.loads(
-        (ROOT / "projects/understanding_gpu_architecture/build_manifests/example_script.json").read_text(
+        (ROOT / "testing/fixtures/manifests/example_script.json").read_text(
             encoding="utf-8"
         )
     )

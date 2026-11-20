@@ -28,7 +28,7 @@ def _manifest() -> dict:
     return json.loads(
         (
             ROOT
-            / "projects/understanding_gpu_architecture/build_manifests/example_script_extended.json"
+            / "testing/fixtures/manifests/example_script_extended.json"
         ).read_text(encoding="utf-8")
     )
 

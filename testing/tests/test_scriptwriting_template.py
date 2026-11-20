@@ -22,7 +22,6 @@ def test_template_has_public_workspace_layout() -> None:
     expected_dirs = (
         "assets",
         "scripts/drafts",
-        "scripts/ready",
         "scripts/archive",
         "agent_knowledge/writing",
         "agent_knowledge/visuals",

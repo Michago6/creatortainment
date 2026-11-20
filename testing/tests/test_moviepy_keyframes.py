@@ -15,7 +15,7 @@ from creatortainment.timeline import timed_element
 
 ROOT = Path(__file__).parents[2]
 ASSETS = ROOT / "testing/assets"
-PROJECT = ROOT / "projects/understanding_gpu_architecture"
+PROJECT = ROOT / "testing"
 
 
 def _script() -> dict:
@@ -30,7 +30,7 @@ def _script() -> dict:
 def _manifest() -> dict:
     """Load the aligned manifest for the real portrait example."""
     return json.loads(
-        (PROJECT / "build_manifests/example_script.json").read_text(
+        (ROOT / "testing/fixtures/manifests/example_script.json").read_text(
             encoding="utf-8"
         )
     )

@@ -13,6 +13,9 @@ from creatortainment.schema.models import ScriptModel
 from creatortainment.schema.validate import asset_generation_plans, validate_script
 
 
+TEST_ASSETS = Path(__file__).parents[1] / "assets"
+
+
 @pytest.mark.parametrize(
     "model",
     ["eleven_v3", "eleven_v3_conversational", "eleven_v4", "eleven_v4_turbo"],
@@ -121,6 +124,7 @@ def test_missing_and_null_generation_defaults_are_equivalent() -> None:
 def test_unused_invalid_default_does_not_need_provider_validation(
     monkeypatch,
 ) -> None:
+    monkeypatch.setattr(cli, "ASSETS_ROOT", TEST_ASSETS)
     script = script_with_assets(
         {"path": "assets/generated.jpg", "generate": generation()},
         defaults={"text_to_image": "required-model", "image_to_image": "unused-invalid"}
@@ -142,6 +146,7 @@ def test_required_model_default_override_and_missing_are_reported(
     monkeypatch,
     capsys,
 ) -> None:
+    monkeypatch.setattr(cli, "ASSETS_ROOT", TEST_ASSETS)
     script = script_with_assets(
         {
             "path": "assets/generated.jpg",
@@ -161,6 +166,7 @@ def test_required_model_default_override_and_missing_are_reported(
 
 
 def test_missing_generation_models_are_grouped_by_method(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "ASSETS_ROOT", TEST_ASSETS)
     script = script_with_assets(
         {
             "path": "assets/generated-image.jpg",
@@ -190,6 +196,7 @@ def test_missing_generation_models_are_grouped_by_method(monkeypatch, capsys) ->
 
 
 def test_provider_validation_receives_only_required_models(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "ASSETS_ROOT", TEST_ASSETS)
     script = script_with_assets(
         {
             "path": "assets/generated.jpg",
@@ -214,6 +221,7 @@ def test_asset_gen_info_reports_generated_only_and_unresolved(
     monkeypatch,
     capsys,
 ) -> None:
+    monkeypatch.setattr(cli, "ASSETS_ROOT", TEST_ASSETS)
     script = script_with_assets(
         {
             "path": "assets/generated.jpg",

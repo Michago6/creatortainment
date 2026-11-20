@@ -1,0 +1,242 @@
+{
+  "narration_hash": "0ae5d56711dc5aefe9716ab0389db47a0974c896bb60706b08c89e1640b4b276",
+  "narration_audio_path": "assets/audio/narration/test_narration.mp3",
+  "word_timestamps": [
+    {
+      "word": "Welcome",
+      "start": 0.0,
+      "end": 0.789
+    },
+    {
+      "word": "back!",
+      "start": 0.94,
+      "end": 1.555
+    },
+    {
+      "word": "Today",
+      "start": 2.159,
+      "end": 2.473
+    },
+    {
+      "word": "we",
+      "start": 2.542,
+      "end": 2.658
+    },
+    {
+      "word": "are",
+      "start": 2.705,
+      "end": 2.821
+    },
+    {
+      "word": "looking",
+      "start": 2.856,
+      "end": 3.099
+    },
+    {
+      "word": "inside",
+      "start": 3.146,
+      "end": 3.425
+    },
+    {
+      "word": "a",
+      "start": 3.459,
+      "end": 3.494
+    },
+    {
+      "word": "GPU",
+      "start": 3.529,
+      "end": 3.901
+    },
+    {
+      "word": "to",
+      "start": 3.947,
+      "end": 4.017
+    },
+    {
+      "word": "see",
+      "start": 4.075,
+      "end": 4.226
+    },
+    {
+      "word": "how",
+      "start": 4.26,
+      "end": 4.353
+    },
+    {
+      "word": "parallel",
+      "start": 4.411,
+      "end": 4.853
+    },
+    {
+      "word": "cores",
+      "start": 4.934,
+      "end": 5.294
+    },
+    {
+      "word": "actually",
+      "start": 5.387,
+      "end": 5.793
+    },
+    {
+      "word": "work.",
+      "start": 5.851,
+      "end": 6.327
+    },
+    {
+      "word": "Look",
+      "start": 6.931,
+      "end": 7.128
+    },
+    {
+      "word": "at",
+      "start": 7.175,
+      "end": 7.221
+    },
+    {
+      "word": "all",
+      "start": 7.267,
+      "end": 7.418
+    },
+    {
+      "word": "these",
+      "start": 7.476,
+      "end": 7.72
+    },
+    {
+      "word": "arithmetic",
+      "start": 7.755,
+      "end": 8.243
+    },
+    {
+      "word": "logic",
+      "start": 8.359,
+      "end": 8.684
+    },
+    {
+      "word": "units",
+      "start": 8.765,
+      "end": 9.079
+    },
+    {
+      "word": "executing",
+      "start": 9.171,
+      "end": 9.74
+    },
+    {
+      "word": "threads",
+      "start": 9.787,
+      "end": 10.124
+    },
+    {
+      "word": "simultaneously.",
+      "start": 10.158,
+      "end": 11.226
+    },
+    {
+      "word": "That",
+      "start": 11.668,
+      "end": 11.888
+    },
+    {
+      "word": "is",
+      "start": 11.946,
+      "end": 12.062
+    },
+    {
+      "word": "thousands",
+      "start": 12.144,
+      "end": 12.689
+    },
+    {
+      "word": "of",
+      "start": 12.747,
+      "end": 12.852
+    },
+    {
+      "word": "tiny",
+      "start": 12.933,
+      "end": 13.293
+    },
+    {
+      "word": "cores,",
+      "start": 13.363,
+      "end": 14.059
+    },
+    {
+      "word": "all",
+      "start": 14.233,
+      "end": 14.512
+    },
+    {
+      "word": "crunching",
+      "start": 14.582,
+      "end": 14.988
+    },
+    {
+      "word": "numbers",
+      "start": 15.035,
+      "end": 15.406
+    },
+    {
+      "word": "at",
+      "start": 15.464,
+      "end": 15.557
+    },
+    {
+      "word": "the",
+      "start": 15.592,
+      "end": 15.661
+    },
+    {
+      "word": "exact",
+      "start": 15.708,
+      "end": 16.033
+    },
+    {
+      "word": "same",
+      "start": 16.091,
+      "end": 16.335
+    },
+    {
+      "word": "time.",
+      "start": 16.37,
+      "end": 16.915
+    },
+    {
+      "word": "Wild,",
+      "start": 17.426,
+      "end": 17.96
+    },
+    {
+      "word": "right?",
+      "start": 18.169,
+      "end": 18.761
+    }
+  ],
+  "scenes": [
+    {
+      "id": "scene_1",
+      "word_offset": 0,
+      "word_count": 16,
+      "start_time_sec": 0.0,
+      "end_time_sec": 6.327,
+      "duration_sec": 6.327
+    },
+    {
+      "id": "scene_2",
+      "word_offset": 16,
+      "word_count": 10,
+      "start_time_sec": 6.931,
+      "end_time_sec": 11.226,
+      "duration_sec": 4.295000000000001
+    },
+    {
+      "id": "scene_3",
+      "word_offset": 26,
+      "word_count": 16,
+      "start_time_sec": 11.668,
+      "end_time_sec": 18.761,
+      "duration_sec": 7.093
+    }
+  ]
+}

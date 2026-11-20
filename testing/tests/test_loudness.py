@@ -12,8 +12,7 @@ from creatortainment.audio.loudness import (
 
 
 ROOT = Path(__file__).parents[2]
-PROJECT = ROOT / "projects/understanding_gpu_architecture"
-NARRATION = next((PROJECT / "narrations").glob("*.mp3"))
+NARRATION = ROOT / "testing/assets/audio/narration/test_narration.mp3"
 MUSIC = ROOT / "testing/assets/audio/monkeys_spinning_monkeys.mp3"
 
 

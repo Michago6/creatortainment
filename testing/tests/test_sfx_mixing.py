@@ -14,7 +14,7 @@ from creatortainment.render.timeline import build_scene_final_offsets, resolve_c
 
 
 ROOT = Path(__file__).parents[2]
-PROJECT = ROOT / "projects/understanding_gpu_architecture"
+PROJECT = ROOT / "testing"
 ASSETS = ROOT / "testing/assets"
 
 
@@ -26,7 +26,7 @@ def _script() -> dict:
 
 def _manifest() -> dict:
     return json.loads(
-        (PROJECT / "build_manifests/example_script.json").read_text(encoding="utf-8")
+        (ROOT / "testing/fixtures/manifests/example_script.json").read_text(encoding="utf-8")
     )
 
 
