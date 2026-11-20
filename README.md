@@ -1,6 +1,6 @@
 # Creatortainment
 
-Creatortainment turns an authored JSON script into a finished short-form
+Creatortainment turns an authored JSON script into a finished 
 video. It combines scenes, narration, reusable visual and audio assets,
 captions, camera motion, transitions, music, and sound effects into a
 MoviePy/FFmpeg rendering pipeline.
@@ -125,7 +125,7 @@ Example prompts:
 ```text
 Create a 30-second short-form script about retro video games.
 Use the assets in the asset library and my saved writing preferences.
-Validate the draft when it is ready.
+Render a preview when the script is finished.
 ```
 
 ```text
@@ -135,6 +135,12 @@ update the asset index, and create an asset sidecar for each one.
 
 ```text
 Create a storyboard for the draft and point out missing assets.
+Do not generate narration or render the full video.
+```
+
+```text
+Describe visual aspects of scenes and missing assets to create a
+video following the drafted storyline.
 Do not generate narration or render the full video.
 ```
 
