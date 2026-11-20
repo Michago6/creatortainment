@@ -58,40 +58,6 @@ the same local commands documented below.
 
 ---
 
-## Render the working example
-
-Clone the repository, install the full dependencies, and run the committed
-example preview:
-
-```bash
-git clone https://github.com/Michago6/creatortainment.git
-cd creatortainment
-python3 -m venv .venv
-.venv/bin/python -m pip install -e '.[full]'
-
-.venv/bin/python -m creatortainment render \
-  testing/scripts/creatortainment_example.json \
-  --preview \
-  --assets-root testing/assets \
-  --manifest testing/fixtures/manifests/creatortainment_example.json \
-  --out "$PWD/testing/output/creatortainment_example_preview.mp4"
-```
-
-No ElevenLabs or fal.ai API key is needed. The example uses a committed 18.76
-second narration MP3 and matching alignment manifest, plus committed images,
-sprites, SFX and music. It does not regenerate narration or download assets.
-
-When the command finishes, open:
-
-```text
-testing/output/creatortainment_example_preview.mp4
-```
-
-The `testing/output/` directory is created automatically and generated videos
-are ignored by Git.
-
----
-
 ## Agent-assisted quick start
 
 ### 1. Create the environment
@@ -256,6 +222,11 @@ and model are resolved:
 ```
 
 ### 2. Generate missing assets
+> [!WARNING]
+> This step calls the fal.ai API to generate missing assets and consumes fal.ai credits. Only run it when your script contains supported `generate` blocks and valid fal.ai credentials are configured.
+
+
+
 
 Use this only when the script contains supported `generate` blocks and provider
 credentials are configured:
