@@ -58,6 +58,40 @@ the same local commands documented below.
 
 ---
 
+## Render the working example
+
+Clone the repository, install the full dependencies, and run the committed
+example preview:
+
+```bash
+git clone https://github.com/Michago6/creatortainment.git
+cd creatortainment
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[full]'
+
+.venv/bin/python -m creatortainment render \
+  testing/scripts/creatortainment_example.json \
+  --preview \
+  --assets-root testing/assets \
+  --manifest testing/fixtures/manifests/creatortainment_example.json \
+  --out "$PWD/testing/output/creatortainment_example_preview.mp4"
+```
+
+No ElevenLabs or fal.ai API key is needed. The example uses a committed 18.76
+second narration MP3 and matching alignment manifest, plus committed images,
+sprites, SFX and music. It does not regenerate narration or download assets.
+
+When the command finishes, open:
+
+```text
+testing/output/creatortainment_example_preview.mp4
+```
+
+The `testing/output/` directory is created automatically and generated videos
+are ignored by Git.
+
+---
+
 ## Agent-assisted quick start
 
 ### 1. Create the environment
@@ -168,25 +202,36 @@ be written there.
 
 ## Direct CLI quick start
 
-The archived Pac-Man script is a useful public example:
+The repository includes a short, cached GPU-explanation example in
+`testing/` that uses only committed test assets and narration:
 
 ```text
-scriptwriting_template/scripts/archive/pac_man_ghosts_were_never_smart.json
+testing/scripts/creatortainment_example.json
 ```
 
-Run the public Pac-Man example directly from the template archive:
+It can be rendered without provider API keys or a private scriptwriting
+workspace:
 
 ```bash
-.venv/bin/python -m creatortainment validate \
-  scriptwriting_template/scripts/archive/pac_man_ghosts_were_never_smart.json
+.venv/bin/python -m creatortainment render \
+  testing/scripts/creatortainment_example.json \
+  --preview \
+  --assets-root testing/assets \
+  --manifest testing/fixtures/manifests/creatortainment_example.json \
+  --out "$PWD/testing/output/creatortainment_example_preview.mp4"
 ```
 
-The normal script lifecycle is:
+The preview is written to `testing/output/creatortainment_example_preview.mp4`.
+Open that MP4 with a media player to watch the complete example.
+
+The working example is the quickest way to verify a fresh clone: it uses
+committed image, sprite, narration, SFX and music fixtures, and does not call
+ElevenLabs or fal.ai.
+
+The normal script lifecycle for local authoring is:
 
 ```text
-scriptwriting_template/scripts/drafts/
-        ↓
-scriptwriting_template/scripts/archive/
+scriptwriting/drafts/ -> scriptwriting/archive/
 ```
 
 ### 1. Validate
@@ -334,7 +379,7 @@ and project-relative `assets/...` paths.
 Projects use a stable title-based folder under `projects/`:
 
 ```text
-projects/pac-man-ghosts-were-never-smart/
+projects/creatortainment_example/
 ├── script.json
 ├── project_state.json
 ├── build_manifest.json

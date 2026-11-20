@@ -10,6 +10,11 @@ from moviepy import ColorClip
 from creatortainment.cli import prepare_render_clip, scale_script_for_preview
 from creatortainment.schema.validate import load_script
 from creatortainment import cli
+from creatortainment.audio.manifest import narration_hash
+from creatortainment.schema.validate import validate_script
+
+
+ROOT = Path(__file__).parents[2]
 
 
 def test_non_preview_render_keeps_project_resolution() -> None:
@@ -64,6 +69,43 @@ def test_preview_script_scales_typed_models() -> None:
     preview = scale_script_for_preview(script)
     assert preview["project"]["resolution"] == [270, 480]
     assert preview["project"]["caption_style"]["font_size"] == 16
+
+
+def test_public_example_script_and_cached_manifest_are_self_contained() -> None:
+    script_path = ROOT / "testing/scripts/creatortainment_example.json"
+    manifest_path = ROOT / "testing/fixtures/manifests/creatortainment_example.json"
+    script = load_script(script_path)
+    assets_root = ROOT / "testing/assets"
+
+    validation = validate_script(script, assets_root)
+    assert validation.valid
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["narration_hash"] == narration_hash(script)
+    assert manifest["narration_audio_path"] == (
+        "../../assets/audio/narration/test_narration.mp3"
+    )
+    assert (manifest_path.parent / manifest["narration_audio_path"]).resolve().is_file()
+
+
+def test_render_parser_exposes_assets_and_manifest_options() -> None:
+    parser = cli.build_parser()
+    args = parser.parse_args(
+        [
+            "render",
+            "testing/scripts/creatortainment_example.json",
+            "--preview",
+            "--assets-root",
+            "testing/assets",
+            "--manifest",
+            "testing/fixtures/manifests/creatortainment_example.json",
+            "--out",
+            "testing/output/example.mp4",
+        ]
+    )
+    assert args.assets_root == Path("testing/assets")
+    assert args.manifest == Path(
+        "testing/fixtures/manifests/creatortainment_example.json"
+    )
 
 
 def test_open_prompt_skips_noninteractive_stdin(monkeypatch, tmp_path: Path) -> None:

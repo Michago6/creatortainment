@@ -13,6 +13,7 @@ generated_images/
 projects/
 .pytest_cache/
 scriptwriting/
+testing/output/
 .zed/
 .vscode/
 .env/

@@ -68,7 +68,6 @@ Examples:
 
 ```text
 minecraft_is_a_horror_game
-pac_man_ghosts_were_never_smart
 asset_generation_test
 ```
 

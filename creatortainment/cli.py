@@ -431,9 +431,21 @@ def generate_assets_command(script_path: Path, force: bool) -> int:
     return 1 if failed else 0
 
 
-def render_command(script_path: Path, output: Path | None, preview: bool) -> int:
+def render_command(
+    script_path: Path,
+    output: Path | None,
+    preview: bool,
+    *,
+    assets_root: Path | None = None,
+    manifest_path_override: Path | None = None,
+) -> int:
     script = load_script(script_path)
-    result = validate_script(script, ASSETS_ROOT)
+    effective_assets_root = (
+        assets_root.resolve()
+        if assets_root is not None
+        else ASSETS_ROOT
+    )
+    result = validate_script(script, effective_assets_root)
     if not result.valid:
         print("Cannot render an invalid script:", file=sys.stderr)
         for error in result.errors:
@@ -452,7 +464,11 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
     if not destination.is_absolute():
         destination = project_dir / destination
     destination = non_overwriting_path(destination, timestamp=timestamp)
-    manifest_path = variant_manifest_path(project_dir, script_path)
+    manifest_path = (
+        manifest_path_override.resolve()
+        if manifest_path_override is not None
+        else variant_manifest_path(project_dir, script_path)
+    )
     if not manifest_path.is_file():
         manifest_path = project_dir / "build_manifest.json"
     if not manifest_path.is_file():
@@ -461,6 +477,13 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
             "Run align for this script before rendering."
         )
     manifest = read_manifest(manifest_path)
+    narration_value = manifest.get("narration_audio_path")
+    if isinstance(narration_value, str):
+        narration_path = Path(narration_value)
+        if not narration_path.is_absolute():
+            resolved_narration = (manifest_path.parent / narration_path).resolve()
+            if manifest_path_override is not None:
+                manifest["narration_audio_path"] = str(resolved_narration)
     try:
         print("Checking cached narration scene boundaries...", flush=True)
         if refresh_cached_manifest_scenes(
@@ -469,16 +492,23 @@ def render_command(script_path: Path, output: Path | None, preview: bool) -> int
             project_dir,
             boundary_status=lambda message: print(message, flush=True),
         ):
-            write_manifest(manifest_path, manifest)
-            if manifest_path != project_dir / "build_manifest.json":
+            if manifest_path_override is not None:
+                write_manifest(
+                    variant_manifest_path(project_dir, script_path),
+                    manifest,
+                )
                 write_manifest(project_dir / "build_manifest.json", manifest)
+            else:
+                write_manifest(manifest_path, manifest)
+                if manifest_path != project_dir / "build_manifest.json":
+                    write_manifest(project_dir / "build_manifest.json", manifest)
     except (FileNotFoundError, ValueError) as exc:
         raise RuntimeError(str(exc)) from exc
     render_script = scale_script_for_preview(script) if preview else script
     clip = build_full_video_clip(
         render_script,
         manifest,
-        ASSETS_ROOT,
+        effective_assets_root,
         project_dir,
         show_scene_numbers=preview,
     )
@@ -811,6 +841,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Render at quarter resolution with faster encoding settings.",
     )
+    render.add_argument(
+        "--assets-root",
+        type=Path,
+        help="Asset root used to resolve project-relative asset paths.",
+    )
+    render.add_argument(
+        "--manifest",
+        type=Path,
+        help="Use an existing build manifest instead of project-generated metadata.",
+    )
     storyboard = commands.add_parser(
         "storyboard",
         help="Generate a fast visual storyboard PNG without narration or video rendering.",
@@ -831,7 +871,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "generate-assets":
         return generate_assets_command(args.script, args.force)
     if args.command == "render":
-        return render_command(args.script, args.out, args.preview)
+        return render_command(
+            args.script,
+            args.out,
+            args.preview,
+            assets_root=args.assets_root,
+            manifest_path_override=args.manifest,
+        )
     if args.command == "storyboard":
         return storyboard_command(args.script, args.out)
     if args.command == "align":
